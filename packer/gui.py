@@ -362,7 +362,7 @@ class CuttingAppGUI:
                 logger.error("Не удалось прочитать CSV-файлы!")
                 self.root.after(0, lambda: messagebox.showerror(
                     "Ошибка", "Не удалось прочитать CSV-файлы!"))
-                self.root.after(0, self.finish_cutting_task)
+                self.root.after(0, self._finish_cutting_thread)
                 return
 
             # Проверяем наличие необходимых колонок
@@ -378,7 +378,7 @@ class CuttingAppGUI:
                 logger.error(error_message)
                 self.root.after(0, lambda: messagebox.showerror(
                     "Ошибка", error_message))
-                self.root.after(0, self.finish_cutting_task)
+                self.root.after(0, self._finish_cutting_thread)
                 return
 
             # Предобработка данных
@@ -388,14 +388,14 @@ class CuttingAppGUI:
             if details_df is None or materials_df is None:
                 self.root.after(0, lambda: messagebox.showerror(
                     "Ошибка", "Ошибка при предобработке данных!"))
-                self.root.after(0, self.finish_cutting_task)
+                self.root.after(0, self._finish_cutting_thread)
                 return
 
             # Проверка критических значений
             if not check_critical_values(details_df, materials_df):
                 self.root.after(0, lambda: messagebox.showerror(
                     "Ошибка", "Обнаружены некорректные значения в данных!"))
-                self.root.after(0, self.finish_cutting_task)
+                self.root.after(0, self._finish_cutting_thread)
                 return
 
             # Переходим в директорию вывода
@@ -404,17 +404,20 @@ class CuttingAppGUI:
 
             # Запускаем раскрой
             logger.info("Начинается процесс раскроя")
-            packers_by_material, total_used_sheets = pack_and_generate_dxf(
+            packers_by_material, total_used_sheets, layout_count = pack_and_generate_dxf(
                 details_df, materials_df, pattern_dir, int(margin), int(kerf))
 
             # Обновляем таблицу материалов с учетом использованных листов и остатков
             updated_materials_df = materials_df.copy()
 
             # Проходимся по всем упаковщикам
-            for material_key, packer in packers_by_material.items():
+            for material_key, packer in packers_by_material.items():  # This line caused the error
                 try:
                     # Обрабатываем разные типы ключей (строка или число)
-                    if isinstance(material_key, (float, int, np.float64, np.int64)):
+                    if isinstance(material_key, (float, int)) or (
+                        hasattr(material_key, 'dtype') and
+                        isinstance(material_key.dtype, (np.float64, np.int64))
+                    ):
                         # Если ключ - число, то толщина = ключ, материал = 'S' по умолчанию
                         thickness = float(material_key)
                         material = 'S'
@@ -422,7 +425,7 @@ class CuttingAppGUI:
                             f"Обработка числового ключа: {material_key} -> толщина={thickness}, материал={material}")
                     else:
                         # Если ключ - строка, разбиваем его на толщину и материал
-                        key_parts = material_key.split('_', 1)
+                        key_parts = str(material_key).split('_', 1)
                         if len(key_parts) != 2:
                             logger.warning(
                                 f"Некорректный ключ материала: {material_key}")
@@ -490,17 +493,10 @@ class CuttingAppGUI:
             os.chdir(current_dir)
 
             # Показываем результаты
-            generated_files = [f for f in os.listdir(output_dir) if f.startswith(
-                "final_layout_") and f.endswith(".dxf")]
-            logger.info(f"Создано карт раскроя: {len(generated_files)}")
-
-            # Подсчитываем количество добавленных остатков
-            remnants_count = sum(1 for _, row in updated_materials_df.iterrows()
-                                 if row.get('is_remnant', False))
+            logger.info(f"Создано карт раскроя: {layout_count}")
 
             self.root.after(0, lambda: messagebox.showinfo("Готово",
-                                                           f"Создано карт раскроя: {len(generated_files)}\n"
-                                                           f"Добавлено остатков: {remnants_count}\n"
+                                                           f"Создано карт раскроя: {layout_count}\n"
                                                            f"Обновлённый файл материалов: {os.path.join(output_dir, 'updated_materials.csv')}\n\n"
                                                            f"Файлы сохранены в: {output_dir}"))
 
@@ -516,10 +512,9 @@ class CuttingAppGUI:
                 "Ошибка", f"Ошибка при выполнении раскроя: {str(e)}"))
 
         finally:
-            self.root.after(0, self.finish_cutting_task)
+            self.root.after(0, self._finish_cutting_thread)
 
-    def finish_cutting_task(self):
-        """Завершает задачу раскроя"""
+    def _finish_cutting_thread(self):
+        """Завершает процесс раскроя и обновляет интерфейс"""
         self.run_button.config(state="normal")
-        self.status_label.config(
-            text="Готово" if self.check_files() else "Ошибка проверки файлов")
+        self.status_label.config(text="Готов к запуску")

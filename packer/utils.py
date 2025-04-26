@@ -2,7 +2,6 @@ import logging
 import pandas as pd
 import re
 from .config import logger
-from .constants import CHAMFER_TYPES
 
 
 def set_log_level(level_name):
