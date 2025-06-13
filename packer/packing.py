@@ -141,7 +141,10 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
 
         # Подготовка деталей для упаковки
         rects_to_pack = []
+        # Создаем счетчик для уникальных идентификаторов копий деталей
+        unique_id_counter = 0
         material_details = material_details.reset_index(drop=True)
+
         for idx, detail in material_details.iterrows():
             packing_width = detail['length_mm'] + kerf
             packing_height = detail['width_mm'] + kerf
@@ -149,9 +152,24 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                 logger.info(
                     f"Пропуск детали {detail['part_id']}: некорректные размеры {packing_width}x{packing_height}")
                 continue
+
             quantity = max(1, int(detail.get('quantity', 1)))
-            for _ in range(quantity):
-                rects_to_pack.append((packing_width, packing_height, idx))
+
+            # Логируем информацию о детали для отладки
+            logger.info(f"Обработка детали ID={detail['part_id']}, " +
+                        f"размеры={detail['length_mm']}x{detail['width_mm']}, " +
+                        f"количество={quantity}")
+
+            # Добавляем каждую копию детали с уникальным ID
+            for q in range(quantity):
+                # Создаем уникальный ID для каждой копии: tuple(idx, unique_id)
+                unique_id = (idx, unique_id_counter)
+                unique_id_counter += 1
+                rects_to_pack.append(
+                    (packing_width, packing_height, unique_id))
+
+                logger.info(f"Добавлена копия {q+1}/{quantity} детали {detail['part_id']} " +
+                            f"с уникальным ID={unique_id}")
 
         if not rects_to_pack:
             logger.info("Нет деталей для упаковки")
@@ -266,15 +284,25 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
 
             # Находим неупакованные детали
             remaining_rects = []
-            packed_ids = set()
+            packed_ids = set()  # Множество для хранения уже упакованных деталей
+
+            # Соберем все упакованные детали из всех предыдущих контейнеров
             for p_type, p_id, p in all_packers:
                 if len(p) > 0 and p[0]:  # Проверяем наличие контейнера и деталей
                     for rect in p[0]:
+                        # rect.rid теперь будет уникальным ID
                         packed_ids.add(rect.rid)
 
-            for w, h, idx in rects_to_pack:
-                if idx not in packed_ids:
-                    remaining_rects.append((w, h, idx))
+            # Подробно логируем количество найденных упакованных деталей
+            logger.info(
+                f"Найдено {len(packed_ids)} упакованных деталей из {len(rects_to_pack)} всего")
+
+            # Проверяем каждую деталь из списка подготовленных
+            for w, h, unique_id in rects_to_pack:
+                if unique_id not in packed_ids:
+                    remaining_rects.append((w, h, unique_id))
+
+            logger.info(f"Осталось упаковать {len(remaining_rects)} деталей")
 
             # Добавляем все неупакованные детали
             for w, h, idx in remaining_rects:
@@ -305,11 +333,21 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
         for p_type, p_id, packer in all_packers:
             # Проверяем наличие контейнера и деталей
             if len(packer) > 0 and packer[0]:
-                packed_rects.update(rect.rid for rect in packer[0])
+                # Добавляем уникальные ID в множество упакованных деталей
+                for rect in packer[0]:
+                    packed_rects.add(rect.rid)
 
-        # Определяем неупакованные детали
-        remaining_rects = [(w, h, idx)
-                           for w, h, idx in rects_to_pack if idx not in packed_rects]
+        logger.info(
+            f"Перед упаковкой на листы: найдено {len(packed_rects)} упакованных деталей")
+
+        # Определяем неупакованные детали - формируем новый список
+        remaining_rects = []
+        for w, h, unique_id in rects_to_pack:
+            if unique_id not in packed_rects:
+                remaining_rects.append((w, h, unique_id))
+
+        logger.info(
+            f"Осталось упаковать на листы: {len(remaining_rects)} деталей")
 
         if remaining_rects and full_sheets:
             logger.info(
@@ -345,14 +383,22 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                 used_full_sheets += 1
 
                 # Обновляем список упакованных деталей
-                newly_packed = set(rect.rid for rect in packer[0])
-                packed_rects.update(newly_packed)
+                newly_packed_ids = set()
+                for rect in packer[0]:
+                    newly_packed_ids.add(rect.rid)
 
-                # Обновляем список оставшихся деталей
-                remaining_rects = [
-                    (w, h, idx) for w, h, idx in remaining_rects if idx not in newly_packed]
+                # Добавляем в общий список упакованных
+                packed_rects.update(newly_packed_ids)
 
-                logger.info(f"Лист {i}: упаковано {len(newly_packed)} деталей")
+                # Обновляем список оставшихся деталей - важно пересоздать список полностью
+                remaining_rects_new = []
+                for w, h, unique_id in remaining_rects:
+                    if unique_id not in newly_packed_ids:
+                        remaining_rects_new.append((w, h, unique_id))
+
+                logger.info(
+                    f"Лист {i}: упаковано {len(newly_packed_ids)} деталей, осталось {len(remaining_rects_new)}")
+                remaining_rects = remaining_rects_new  # Заменяем список
 
         logger.info(f"Использовано целых листов: {used_full_sheets}")
 
@@ -408,8 +454,10 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
 
                 # Добавляем все детали в DXF
                 for rect in packer[0]:
-                    idx = rect.rid
-                    detail = material_details.iloc[idx]
+                    # Извлекаем индекс детали из rid (теперь это кортеж (idx, unique_id))
+                    detail_idx = rect.rid[0] if isinstance(
+                        rect.rid, tuple) else rect.rid
+                    detail = material_details.iloc[detail_idx]
 
                     # Рассчитываем фактические размеры детали (за вычетом kerf)
                     rect_width = rect.width - kerf
@@ -435,6 +483,11 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                         msp, detail, detail_rect, kerf)
                     if detail_info:
                         details_list.append(detail_info)
+
+                    # Выводим информацию о копии детали для отладки
+                    copy_id = rect.rid[1] if isinstance(rect.rid, tuple) else 0
+                    logger.info(f"Добавлена деталь {detail['part_id']} (копия ID: {copy_id}) " +
+                                f"в DXF с размерами {rect_width}x{rect_height}")
 
                 # Формируем имя файла
                 if is_remnant:

@@ -415,7 +415,7 @@ def add_details_list(msp, sheet_width, details_list, filename=None):
 
                 part_id, order_id, size = detail_info
                 # Формируем текст по указанному формату
-                text = f"part_{part_id}_{order_id}_{size}"
+                text = f"{part_id}_{order_id}"
 
                 # Создаем текст
                 text_entity = msp.add_text(text)
@@ -485,7 +485,7 @@ def add_detail_dimensions(msp, x, y, width, height, part_id, order_id, thickness
     thickness = str(thickness) if thickness is not None else "?"
 
     # Формируем текст подписи: номер детали, номер заказа, размер
-    text = f"{part_id} {order_id} {width}x{height}"
+    text = f"{part_id} {order_id}"
 
     # Отступ от края детали для размещения текста
     margin = 5
@@ -497,7 +497,7 @@ def add_detail_dimensions(msp, x, y, width, height, part_id, order_id, thickness
         # Создаем текст с соответствующими атрибутами
         text_entity = msp.add_text(text)
         text_entity.dxf.layer = 'TEXT'
-        text_entity.dxf.color = 1  # Красный
+        text_entity.dxf.color = 3  # Зеленый (был 1 - Красный)
         text_entity.dxf.height = 40
 
         # Устанавливаем положение и поворот в зависимости от ориентации детали
