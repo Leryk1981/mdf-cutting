@@ -19,10 +19,7 @@ from packer.remnants import RemnantsManager
 from packer.packing import pack_and_generate_dxf
 from packer.utils import (
     set_log_level,
-    read_csv_files,
-    validate_dataframes,
-    preprocess_dataframes,
-    check_critical_values
+    load_and_prepare_data # Changed imports
 )
 
 
@@ -354,47 +351,19 @@ class CuttingAppGUI:
             remnants_manager = RemnantsManager(
                 margin=int(margin), kerf=int(kerf))
 
-            # Читаем CSV файлы
-            details_df, materials_df = read_csv_files(
-                details_path, materials_path, SUPPORTED_ENCODINGS)
+            # Загружаем и подготавливаем данные с помощью новой функции
+            details_df, materials_df, error_message = load_and_prepare_data(
+                details_path,
+                materials_path,
+                DETAILS_REQUIRED_COLUMNS,
+                MATERIALS_REQUIRED_COLUMNS,
+                SUPPORTED_ENCODINGS
+            )
 
-            if details_df is None or materials_df is None:
-                logger.error("Не удалось прочитать CSV-файлы!")
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Ошибка", "Не удалось прочитать CSV-файлы!"))
-                self.root.after(0, self._finish_cutting_thread)
-                return
-
-            # Проверяем наличие необходимых колонок
-            is_valid, missing_cols_details, missing_cols_materials = validate_dataframes(
-                details_df, materials_df, DETAILS_REQUIRED_COLUMNS, MATERIALS_REQUIRED_COLUMNS)
-
-            if not is_valid:
-                error_message = "Отсутствуют обязательные колонки:\n"
-                if missing_cols_details:
-                    error_message += f"В файле деталей: {', '.join(missing_cols_details)}\n"
-                if missing_cols_materials:
-                    error_message += f"В файле материалов: {', '.join(missing_cols_materials)}"
-                logger.error(error_message)
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Ошибка", error_message))
-                self.root.after(0, self._finish_cutting_thread)
-                return
-
-            # Предобработка данных
-            details_df, materials_df = preprocess_dataframes(
-                details_df, materials_df)
-
-            if details_df is None or materials_df is None:
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Ошибка", "Ошибка при предобработке данных!"))
-                self.root.after(0, self._finish_cutting_thread)
-                return
-
-            # Проверка критических значений
-            if not check_critical_values(details_df, materials_df):
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Ошибка", "Обнаружены некорректные значения в данных!"))
+            if error_message:
+                logger.error(f"Ошибка при загрузке и подготовке данных: {error_message}")
+                # Сообщение об ошибке уже залогировано в load_and_prepare_data
+                self.root.after(0, lambda: messagebox.showerror("Ошибка данных", error_message))
                 self.root.after(0, self._finish_cutting_thread)
                 return
 
@@ -404,100 +373,32 @@ class CuttingAppGUI:
 
             # Запускаем раскрой
             logger.info("Начинается процесс раскроя")
-            packers_by_material, total_used_sheets, layout_count = pack_and_generate_dxf(
+            # pack_and_generate_dxf handles its own RemnantsManager instance and saves the
+            # final updated_materials.csv directly.
+            # The returned packers_by_material and total_used_sheets are not strictly needed here
+            # if we rely on the file saved by pack_and_generate_dxf.
+            # We only need layout_count for the message box.
+            _, _, layout_count = pack_and_generate_dxf(
                 details_df, materials_df, pattern_dir, int(margin), int(kerf))
 
-            # Обновляем таблицу материалов с учетом использованных листов и остатков
-            updated_materials_df = materials_df.copy()
-
-            # Проходимся по всем упаковщикам
-            for material_key, packer in packers_by_material.items():  # This line caused the error
-                try:
-                    # Обрабатываем разные типы ключей (строка или число)
-                    if isinstance(material_key, (float, int)) or (
-                        hasattr(material_key, 'dtype') and
-                        isinstance(material_key.dtype, (np.float64, np.int64))
-                    ):
-                        # Если ключ - число, то толщина = ключ, материал = 'S' по умолчанию
-                        thickness = float(material_key)
-                        material = 'S'
-                        logger.info(
-                            f"Обработка числового ключа: {material_key} -> толщина={thickness}, материал={material}")
-                    else:
-                        # Если ключ - строка, разбиваем его на толщину и материал
-                        key_parts = str(material_key).split('_', 1)
-                        if len(key_parts) != 2:
-                            logger.warning(
-                                f"Некорректный ключ материала: {material_key}")
-                            # Пробуем преобразовать в число
-                            thickness = float(material_key)
-                            material = 'S'
-                        else:
-                            thickness = float(key_parts[0])
-                            material = key_parts[1]
-
-                    if thickness <= 0:
-                        logger.warning(
-                            f"Пропуск материала с неположительной толщиной: {thickness}")
-                        continue
-
-                    logger.info(
-                        f"Обработка остатков для комбинации: толщина={thickness}, материал={material}")
-
-                    # Находим подходящие листы материала для этой комбинации
-                    material_mask = (materials_df['thickness_mm'] == thickness) & (
-                        materials_df['material'] == material)
-                    material_sheets = materials_df[material_mask]
-
-                    if material_sheets.empty:
-                        logger.warning(
-                            f"Не найдены материалы с комбинацией: толщина={thickness}, материал={material}")
-                        continue
-
-                    # Получаем размеры листа для этой комбинации
-                    sheet_length = float(
-                        material_sheets['sheet_length_mm'].iloc[0])
-                    sheet_width = float(
-                        material_sheets['sheet_width_mm'].iloc[0])
-
-                    # Проверяем корректность размеров листа
-                    if sheet_length <= 0 or sheet_width <= 0:
-                        logger.warning(
-                            f"Некорректные размеры листа с комбинацией: толщина={thickness}, материал={material}: {sheet_length}x{sheet_width}")
-                        continue
-
-                    # Рассчитываем количество использованных листов этой комбинации
-                    used_sheets = 0
-                    for bin_idx, bin_rects in enumerate(packer):
-                        if bin_rects:  # Если в контейнере есть прямоугольники
-                            used_sheets += 1
-
-                    # Обновляем таблицу для этой комбинации
-                    logger.info(
-                        f"Обновление таблицы для комбинации: толщина={thickness}, материал={material}. Использовано листов: {used_sheets}")
-                    updated_materials_df = remnants_manager.update_material_table(
-                        updated_materials_df, packer, thickness, material, used_sheets,
-                        sheet_length, sheet_width)
-
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка при обработке остатков для ключа {material_key}: {str(e)}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-
-            # Сохраняем обновленную таблицу материалов
-            remnants_manager.save_material_table(
-                updated_materials_df, os.path.join(output_dir, "updated_materials.csv"))
+            # The loop for updating materials table and the subsequent save call
+            # that were here previously have been removed.
+            # pack_and_generate_dxf is now solely responsible for the correct
+            # generation and saving of "updated_materials.csv".
 
             # Возвращаемся в исходную директорию
             os.chdir(current_dir)
 
             # Показываем результаты
-            logger.info(f"Создано карт раскроя: {layout_count}")
+            # The filename "updated_materials.csv" is hardcoded in pack_and_generate_dxf
+            final_materials_file_path = os.path.join(output_dir, "updated_materials.csv")
+            logger.info(f"Процесс раскроя завершен. Создано карт раскроя: {layout_count}.")
+            logger.info(f"Финальная таблица материалов сохранена в: {final_materials_file_path}")
+
 
             self.root.after(0, lambda: messagebox.showinfo("Готово",
                                                            f"Создано карт раскроя: {layout_count}\n"
-                                                           f"Обновлённый файл материалов: {os.path.join(output_dir, 'updated_materials.csv')}\n\n"
+                                                           f"Обновлённый файл материалов: {final_materials_file_path}\n\n"
                                                            f"Файлы сохранены в: {output_dir}"))
 
             # Очищаем временные файлы если нужно

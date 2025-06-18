@@ -289,3 +289,76 @@ def prepare_materials_df(materials_df):
     materials_df['material'] = materials_df['material'].astype(str).str.upper()
 
     return materials_df
+
+
+def load_and_prepare_data(details_path, materials_path, details_required_cols,
+                          materials_required_cols, supported_encodings):
+    """
+    Orchestrates the loading and preparation of details and materials data.
+
+    This function calls the following sequence of operations:
+    1. read_csv_files: Reads data from CSV files.
+    2. validate_dataframes: Validates that necessary columns are present.
+    3. preprocess_dataframes: Cleans and transforms data (e.g., type conversion, handling missing values).
+    4. check_critical_values: Checks for values that would prevent further processing (e.g., negative dimensions).
+
+    Args:
+        details_path (str): Path to the details CSV file.
+        materials_path (str): Path to the materials CSV file.
+        details_required_cols (list[str]): List of required column names for the details DataFrame.
+        materials_required_cols (list[str]): List of required column names for the materials DataFrame.
+        supported_encodings (list[str]): List of encodings to try when reading CSV files.
+
+    Returns:
+        tuple: (details_df, materials_df, error_message)
+               - details_df (pd.DataFrame | None): Processed details DataFrame, or None if an error occurred.
+               - materials_df (pd.DataFrame | None): Processed materials DataFrame, or None if an error occurred.
+               - error_message (str | None): An error message string if any step failed, otherwise None.
+    """
+    logger.info("Starting data loading and preparation process.")
+
+    # 1. Read CSV files
+    details_df, materials_df = read_csv_files(details_path, materials_path, supported_encodings)
+    if details_df is None or materials_df is None:
+        error_msg = "Failed to read one or both CSV files. Check logs for details on encodings."
+        logger.error(error_msg)
+        return None, None, error_msg
+
+    logger.info("Successfully read CSV files.")
+
+    # 2. Validate DataFrames
+    is_valid, missing_cols_details, missing_cols_materials = validate_dataframes(
+        details_df, materials_df, details_required_cols, materials_required_cols
+    )
+    if not is_valid:
+        error_parts = []
+        if missing_cols_details:
+            error_parts.append(f"Missing in details file: {', '.join(missing_cols_details)}")
+        if missing_cols_materials:
+            error_parts.append(f"Missing in materials file: {', '.join(missing_cols_materials)}")
+        error_msg = "Data validation failed. Required columns are missing. " + "; ".join(error_parts)
+        logger.error(error_msg)
+        return None, None, error_msg
+
+    logger.info("Successfully validated DataFrame columns.")
+
+    # 3. Preprocess DataFrames
+    details_df, materials_df = preprocess_dataframes(details_df, materials_df)
+    if details_df is None or materials_df is None:
+        error_msg = "Data preprocessing failed. Check logs for details."
+        logger.error(error_msg)
+        # preprocess_dataframes logs the specific error, so a generic message here is okay.
+        return None, None, error_msg
+
+    logger.info("Successfully preprocessed DataFrames.")
+
+    # 4. Check Critical Values
+    if not check_critical_values(details_df, materials_df):
+        # check_critical_values logs the specific error.
+        error_msg = "Critical value check failed. Invalid data detected (e.g., nulls, negative dimensions). Check logs."
+        logger.error(error_msg)
+        return None, None, error_msg
+
+    logger.info("Successfully passed critical value checks.")
+    logger.info("Data loading and preparation completed successfully.")
+    return details_df, materials_df, None

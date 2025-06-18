@@ -2,7 +2,7 @@ import os
 from rectpack import newPacker, MaxRectsBssf
 from .config import logger
 from .patterns import load_patterns
-from .dxf_generator import (
+from .dxf_writer import (
     create_new_dxf,
     add_sheet_outline,
     add_detail_to_sheet,
@@ -68,560 +68,640 @@ def format_remnant_id(remnant_id):
     return remnant_id
 
 
-def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", margin=DEFAULT_MARGIN, kerf=DEFAULT_KERF):
+def _prepare_details_for_packing(details_df_for_material, kerf):
     """
-    Упаковывает детали и генерирует DXF файлы с приоритетом остатков.
-    Гарантирует сохранение оригинальных remnant_id при создании карт раскроя.
+    Prepares a list of rectangles (details) with unique IDs for packing.
+    Each rectangle's dimensions are increased by the kerf value.
 
     Args:
-        details_df: DataFrame с деталями
-        materials_df: DataFrame с материалами
-        pattern_dir: директория с узорами
-        margin: отступ от края листа (мм)
-        kerf: диаметр фрезы (мм)
+        details_df_for_material (pd.DataFrame): DataFrame containing details for a specific material/thickness.
+                                                Requires columns: 'part_id', 'length_mm', 'width_mm', 'quantity'.
+        kerf (float): Kerf value (cutter diameter) to be added to detail dimensions.
 
     Returns:
-        tuple: (словарь упаковщиков, количество использованных листов, количество карт раскроя)
+        list[tuple[float, float, tuple[int, int]]]:
+            A list of tuples, where each tuple represents a detail instance:
+            (packing_width, packing_height, unique_detail_id).
+            'packing_width' is detail_length + kerf.
+            'packing_height' is detail_width + kerf.
+            'unique_detail_id' is a tuple (original_detail_index, copy_counter).
+            Returns an empty list if no valid details are found.
     """
-    # Импортируем нужные алгоритмы из rectpack
-    from rectpack import MaxRectsBaf, MaxRectsBssf
+    rects_to_pack = []
+    unique_id_counter = 0 # Counter to make each detail copy unique
+    details_df_for_material = details_df_for_material.reset_index(drop=True)
 
-    print("Запуск упаковки с полным приоритетом остатков")
-    logger.info("Запуск упаковки с полным приоритетом остатков")
+    for idx, detail in details_df_for_material.iterrows():
+        detail_length = detail['length_mm']
+        detail_width = detail['width_mm']
+        part_id = detail['part_id']
+
+        packing_width = detail_length + kerf
+        packing_height = detail_width + kerf
+
+        if packing_width <= 0 or packing_height <= 0:
+            logger.warning(
+                f"Skipping detail {part_id} due to invalid packing dimensions: {packing_width}x{packing_height}"
+            )
+            continue
+
+        quantity = max(1, int(detail.get('quantity', 1)))
+        logger.info(f"Processing detail ID={part_id}, " +
+                    f"original size={detail_length}x{detail_width}, quantity={quantity}")
+
+        for _ in range(quantity): # Use _ if q is not used
+            unique_detail_id = (idx, unique_id_counter)
+            unique_id_counter += 1
+            rects_to_pack.append(
+                (packing_width, packing_height, unique_detail_id))
+            # Reduced verbosity for logging each copy, can be re-enabled if needed for deep debugging
+            # logger.info(f"Added copy {q+1}/{quantity} of detail {part_id} " +
+            #             f"with unique ID={unique_detail_id}")
+
+    if not rects_to_pack:
+        logger.info("No details to pack for the current material configuration.")
+    else:
+        logger.info(f"Prepared {len(rects_to_pack)} detail instances for packing.")
+    return rects_to_pack
+
+
+def _prepare_materials(sheets_df_for_material, margin):
+    """
+    Prepares lists of remnant and full sheet dictionaries from the material sheets DataFrame.
+    Each dictionary includes original dimensions and dimensions with margin for packing.
+
+    Args:
+        sheets_df_for_material (pd.DataFrame): DataFrame containing sheet/remnant data for a specific material/thickness.
+                                               Requires columns: 'is_remnant', 'remnant_id',
+                                               'sheet_length_mm', 'sheet_width_mm', 'total_quantity'.
+        margin (float): Margin to be subtracted from sheet/remnant dimensions for packing area.
+
+    Returns:
+        tuple[list[dict], dict, list[dict]]:
+            - list[dict]: `remnants_list` - A list of dictionaries, each representing a remnant instance.
+                          Each dict contains: 'width', 'length', 'remnant_id', 'width_with_margin', 'length_with_margin'.
+            - dict: `remnant_lookup` - A dictionary mapping remnant_id to its properties (first encountered if IDs are not unique).
+            - list[dict]: `full_sheets_list` - A list of dictionaries, each representing a full sheet instance.
+                          Each dict contains: 'width', 'length', 'width_with_margin', 'length_with_margin'.
+    """
+    remnants_list = []
+    remnant_lookup = {} # For quick lookup of remnant properties by ID
+
+    # Process remnants
+    remnant_rows = sheets_df_for_material[sheets_df_for_material['is_remnant'] == True].copy()
+    logger.info(f"Found {len(remnant_rows)} types of remnants for this material.")
+
+    for _, remnant_row in remnant_rows.iterrows():
+        remnant_id = remnant_row.get('remnant_id', None)
+        if remnant_id is None:
+            logger.warning(f"Skipping a remnant entry due to missing remnant_id: {remnant_row}")
+            continue
+
+        length = float(remnant_row['sheet_length_mm'])
+        width = float(remnant_row['sheet_width_mm'])
+
+        if length <= 0 or width <= 0:
+            logger.warning(
+                f"Skipping remnant with ID={remnant_id} due to invalid dimensions: {length}x{width}"
+            )
+            continue
+
+        # Each remnant type can have multiple instances (total_quantity)
+        for _ in range(int(remnant_row['total_quantity'])):
+            remnant_properties = {
+                'width': width,
+                'length': length,
+                'remnant_id': remnant_id,
+                'width_with_margin': remnant_width - 2 * margin,
+                'length_with_margin': remnant_length - 2 * margin
+            }
+            remnants_list.append(remnant_properties)
+            if remnant_id not in remnant_lookup: # Store properties for the first encountered instance of this ID
+                remnant_lookup[remnant_id] = remnant_properties
+            # logger.info(f"Added remnant instance with ID={remnant_id}, dimensions={length}x{width}") # Can be verbose
+
+    logger.info(f"Prepared {len(remnants_list)} total remnant instances.")
+    if remnants_list:
+        remnants_list.sort(key=lambda r: r['width'] * r['length'], reverse=True)
+        logger.info("Remnants sorted by area in descending order.")
+
+    # Process full sheets
+    full_sheets_list = []
+    full_sheet_rows = sheets_df_for_material[sheets_df_for_material['is_remnant'] == False]
+    logger.info(f"Found {len(full_sheet_rows)} types of full sheets for this material.")
+
+    for _, sheet_row in full_sheet_rows.iterrows():
+        length = float(sheet_row['sheet_length_mm'])
+        width = float(sheet_row['sheet_width_mm'])
+
+        if length <= 0 or width <= 0:
+            logger.warning(
+                f"Skipping a full sheet entry due to invalid dimensions: {length}x{width}"
+            )
+            continue
+
+        # Each sheet type can have multiple instances
+        for _ in range(int(sheet_row['total_quantity'])):
+            full_sheets_list.append({
+                'width': width,
+                'length': length,
+                'width_with_margin': sheet_width - 2 * margin,
+                'length_with_margin': sheet_length - 2 * margin
+            })
+            # logger.info(f"Added full sheet instance, dimensions={length}x{width}") # Can be verbose
+
+    logger.info(f"Prepared {len(full_sheets_list)} total full sheet instances.")
+    return remnants_list, remnant_lookup, full_sheets_list
+
+
+def _pack_into_remnants(material_remnants, rects_to_pack, margin):
+    """
+    Packs details into available remnant sheets using MaxRectsBaf algorithm.
+    Attempts to fill remnants one by one.
+
+    Args:
+        material_remnants (list[dict]): List of remnant dictionaries (properties).
+        rects_to_pack (list[tuple]): List of tuples (width, height, id) for all details of the current material.
+        margin (float): Margin used for packing (already accounted for in remnant dimensions).
+
+    Returns:
+        tuple[list[tuple[str, any, object]], set[any]]:
+            - `packed_remnant_layouts`: List of tuples ("remnant", remnant_id, packer_instance) for successfully used remnants.
+            - `used_remnant_ids`: Set of remnant_ids that were used and had details packed into them.
+    """
+    from rectpack import MaxRectsBaf
+
+    packed_remnant_layouts = []
+    used_remnant_ids = set()
+    # Tracks detail IDs that have been successfully packed into *any* remnant in this phase
+    detail_ids_packed_in_remnants_phase = set()
+
+    logger.info("\nPhase 1: Packing into Remnants")
+
+    for remnant_props in material_remnants:
+        remnant_id = remnant_props['remnant_id']
+        logger.info(f"Attempting to pack into remnant ID={remnant_id}")
+
+        packer = newPacker(rotation=True, pack_algo=MaxRectsBaf)
+        packer.add_bin(remnant_props['length_with_margin'], remnant_props['width_with_margin'])
+
+        # Filter details: only try to pack those not already packed in a *previous* remnant (in this phase)
+        rects_for_this_remnant = []
+        for w, h, unique_detail_id in rects_to_pack:
+            if unique_detail_id not in detail_ids_packed_in_remnants_phase:
+                 rects_for_this_remnant.append((w, h, unique_detail_id))
+
+        if not rects_for_this_remnant:
+            logger.info(f"No remaining details to pack for remnant ID={remnant_id}.")
+            continue # All details for this material were packed in previous remnants
+
+        for w, h, detail_id_tuple in rects_for_this_remnant:
+            packer.add_rect(w, h, detail_id_tuple)
+
+        packer.pack()
+
+        # Check if this specific remnant packer actually packed any items
+        if len(packer) > 0 and packer[0] and len(packer[0]) > 0:
+            logger.info(f"Successfully packed {len(packer[0])} details into remnant ID={remnant_id}.")
+            packed_remnant_layouts.append(("remnant", remnant_id, packer))
+            used_remnant_ids.add(remnant_id)
+            # Add the newly packed detail IDs to the set for this phase
+            for rect in packer[0]:
+                detail_ids_packed_in_remnants_phase.add(rect.rid)
+        else:
+            logger.info(f"Remnant ID={remnant_id} was not used or could not pack any details.")
+
+    logger.info(f"Finished packing into remnants. Used {len(used_remnant_ids)} remnants.")
+    return packed_remnant_layouts, used_remnant_ids
+
+
+def _get_remaining_rects(all_rects, packed_detail_ids_set):
+    """
+    Filters a list of rectangles to exclude those whose IDs are in the provided set.
+
+    Args:
+        all_rects (list[tuple[float, float, tuple[int, int]]]): The initial list of rectangles.
+        packed_detail_ids_set (set[tuple[int, int]]): A set of unique_detail_ids that have already been packed.
+
+    Returns:
+        list[tuple[float, float, tuple[int, int]]]: A new list containing only the rectangles not yet packed.
+    """
+    return [rect for rect in all_rects if rect[2] not in packed_detail_ids_set]
+
+
+def _pack_into_full_sheets(material_full_sheets, all_rects_for_material, detail_ids_packed_in_remnants, margin):
+    """
+    Packs remaining details into available full sheets using MaxRectsBssf algorithm.
+
+    Args:
+        material_full_sheets (list[dict]): List of full sheet dictionaries (properties).
+        all_rects_for_material (list[tuple]): Original list of all (width, height, id) tuples for details of the current material.
+        detail_ids_packed_in_remnants (set[tuple[int,int]]): Set of unique_detail_ids of details already packed (e.g., in remnants).
+        margin (float): Margin for packing (already accounted for in sheet dimensions).
+
+    Returns:
+        tuple[list[tuple[str, int, object]], int]:
+            - `packed_sheet_layouts`: List of tuples ("sheet", sheet_index, packer_instance) for successfully used sheets.
+            - `used_full_sheets_count`: Number of full sheets used in this phase.
+    """
+    from rectpack import MaxRectsBssf
+
+    packed_sheet_layouts = []
+    used_full_sheets_count = 0
+
+    # Determine details that still need packing after remnant phase
+    rects_to_pack_in_sheets = _get_remaining_rects(all_rects_for_material, detail_ids_packed_in_remnants)
+
+    logger.info("\nPhase 2: Packing into Full Sheets")
+    logger.info(f"Attempting to pack {len(rects_to_pack_in_sheets)} details into full sheets.")
+
+    if rects_to_pack_in_sheets and material_full_sheets:
+        # Tracks detail IDs packed within this full sheet packing phase (across multiple sheets)
+        detail_ids_packed_in_sheets_phase = set()
+
+        for sheet_idx, sheet_props in enumerate(material_full_sheets):
+            # Details that are not in remnants AND not in *previous sheets of this phase*
+            current_rects_for_this_sheet = _get_remaining_rects(rects_to_pack_in_sheets, detail_ids_packed_in_sheets_phase)
+
+            if not current_rects_for_this_sheet:
+                logger.info("All remaining details have been packed into previous sheets. Stopping full sheet packing.")
+                break # No more details left to pack into any subsequent sheet
+
+            packer = newPacker(rotation=True, pack_algo=MaxRectsBssf)
+            packer.add_bin(sheet_props['length_with_margin'], sheet_props['width_with_margin'])
+
+            for w, h, detail_id_tuple in current_rects_for_this_sheet:
+                packer.add_rect(w, h, detail_id_tuple)
+
+            packer.pack()
+
+            if len(packer) > 0 and packer[0] and len(packer[0]) > 0:
+                packed_sheet_layouts.append(("sheet", sheet_idx, packer))
+                used_full_sheets_count += 1
+
+                newly_packed_ids_this_sheet = set()
+                for rect in packer[0]:
+                    newly_packed_ids_this_sheet.add(rect.rid)
+
+                detail_ids_packed_in_sheets_phase.update(newly_packed_ids_this_sheet)
+                logger.info(
+                    f"Sheet {sheet_idx}: packed {len(newly_packed_ids_this_sheet)} details. "
+                    f"Total details packed in sheets so far: {len(detail_ids_packed_in_sheets_phase)}."
+                )
+            else:
+                 logger.info(f"Sheet {sheet_idx} was not used or could not pack any remaining details.")
+
+    logger.info(f"Finished packing into full sheets. Used {used_full_sheets_count} full sheets.")
+    return packed_sheet_layouts, used_full_sheets_count
+
+
+def _generate_dxf_files_for_layouts(
+    layouts_for_material, details_for_current_material,
+    material_full_sheets_props, material_remnants_lookup,
+    thickness, material, margin, kerf, total_layout_count_so_far):
+    """
+    Generates DXF files for each layout (packed sheet or remnant).
+    Also aggregates all packed items into a final packer for the material.
+
+    Args:
+        layouts_for_material (list[tuple[str, any, object]]):
+            List of tuples (container_type, container_id, packer_instance).
+            container_type is "remnant" or "sheet".
+            container_id is remnant_id or sheet_index.
+        details_for_current_material (pd.DataFrame): DataFrame of details for the current material.
+        material_full_sheets_props (list[dict]): List of properties for full sheets (for original dimension lookup).
+        material_remnants_lookup (dict): Dict mapping remnant_id to remnant properties.
+        thickness (float | str): Thickness of the material.
+        material (str): Name/code of the material.
+        margin (float): Margin value used in packing.
+        kerf (float): Kerf value used for details.
+        total_layout_count_so_far (int): Current total count of generated DXF layouts across all materials.
+
+    Returns:
+        tuple[object, int]:
+            - `final_packer_for_material`: A single `Packer` instance containing all packed items from all layouts for this material.
+            - `updated_total_layout_count`: Incremented total layout count.
+    """
+    logger.info("\nPhase 3: Generating DXF Files and Finalizing Material Packer")
+    final_packer_for_material = newPacker(rotation=True, pack_algo=MaxRectsBssf)
+
+    # Use a unique bin ID for each layout added to the final_packer_for_material
+    # This ensures that items from different physical sheets/remnants are in different bins in the final packer.
+    final_packer_bin_id_counter = 0
+    layouts_generated_this_material = 0
+
+    for container_type, container_id, packer in layouts_for_material:
+        # Ensure the packer for this layout actually contains packed items
+        if not (len(packer) > 0 and packer[0] and len(packer[0]) > 0):
+            logger.info(f"Skipping empty packer for {container_type} ID {container_id} during DXF generation.")
+            continue
+
+        is_remnant_layout = (container_type == "remnant")
+        original_sheet_width, original_sheet_length = 0, 0
+
+        if is_remnant_layout:
+            remnant_props = material_remnants_lookup.get(container_id)
+            if not remnant_props:
+                logger.error(f"Could not find properties for remnant ID={container_id} for DXF generation. Skipping.")
+                continue
+            original_sheet_width = remnant_props['width']
+            original_sheet_length = remnant_props['length']
+        else: # sheet layout
+            sheet_idx = container_id
+            if sheet_idx >= len(material_full_sheets_props):
+                logger.error(f"Sheet index {sheet_idx} is out of bounds for DXF generation. Skipping.")
+                continue
+            sheet_props = material_full_sheets_props[sheet_idx]
+            original_sheet_width = sheet_props['width']
+            original_sheet_length = sheet_props['length']
+
+        try:
+            doc, msp = create_new_dxf()
+            add_sheet_outline(msp, original_sheet_length, original_sheet_width, margin)
+            dxf_detail_items_list = [] # For the list of parts in the DXF file text
+
+            for rect in packer[0]: # Iterate over packed rectangles in this layout
+                # rect.rid is the unique_detail_id (original_detail_index, copy_counter)
+                original_detail_index = rect.rid[0]
+                detail_data = details_for_current_material.iloc[original_detail_index]
+
+                # Actual dimensions of the part (after subtracting kerf from packing dimensions)
+                part_actual_length = rect.width - kerf
+                part_actual_width = rect.height - kerf
+
+                # Determine if the part was rotated by comparing packed dimensions with original dimensions
+                # (accounting for kerf)
+                is_rotated = (abs(part_actual_length - detail_data['length_mm']) > 0.1) or \
+                               (abs(part_actual_width - detail_data['width_mm']) > 0.1)
+
+                # Information for add_detail_to_sheet function
+                dxf_rect_details = {
+                    'x': rect.x + margin,
+                    'y': rect.y + margin,
+                    'width': rect.width, # Pass packing width (part_actual_length + kerf)
+                    'height': rect.height, # Pass packing height (part_actual_width + kerf)
+                    'rotated': is_rotated
+                }
+                # Add detail to DXF and get its info for the list
+                dxf_detail_list_item = add_detail_to_sheet(msp, detail_data, dxf_rect_details, kerf)
+                if dxf_detail_list_item:
+                    dxf_detail_items_list.append(dxf_detail_list_item)
+
+                # logger.info(f"Added detail {detail_data['part_id']} (copy ID: {rect.rid[1]}) " +
+                #             f"to DXF for {container_type} {container_id}") # Can be verbose
+
+            # Format filename
+            thickness_str = str(int(thickness)) if float(thickness).is_integer() else str(thickness)
+            length_str = str(int(original_sheet_length))
+            width_str = str(int(original_sheet_width))
+
+            if is_remnant_layout:
+                formatted_remnant_id = format_remnant_id(container_id)
+                output_file = f"{formatted_remnant_id}_{length_str}x{width_str}_{thickness_str}mm"
+                if material != 'S': # Assuming 'S' is a standard material not needing name in file
+                    output_file += f"_{material}"
+                output_file += ".dxf"
+                logger.info(f"Generating DXF for remnant ID={container_id} (formatted as {formatted_remnant_id}), file: {output_file}")
+            else: # sheet layout
+                output_file = f"sheet_{thickness_str}mm"
+                if material != 'S':
+                    output_file += f"_{material}"
+                output_file += f"_{container_id}.dxf" # container_id is sheet_idx here
+                logger.info(f"Generating DXF for full sheet index {container_id}, file: {output_file}")
+
+            add_layout_filename_title(msp, original_sheet_length, original_sheet_width, output_file)
+            add_details_list(msp, original_sheet_width, dxf_detail_items_list) # Use original_sheet_width for positioning
+            doc.saveas(output_file)
+            logger.info(f"Saved DXF file: {output_file}")
+            layouts_generated_this_material += 1
+
+            # Add this layout's packed items to the final_packer_for_material
+            # The bin dimensions for final_packer should be the same as the ones used for packing this layout
+            # (i.e., dimensions with margin)
+            layout_bin_width = packer.bin_width(0)
+            layout_bin_height = packer.bin_height(0)
+
+            final_packer_for_material.add_bin(layout_bin_width, layout_bin_height, bid=final_packer_bin_id_counter)
+            for rect in packer[0]: # rect dimensions already include kerf
+                final_packer_for_material.add_rect(rect.width, rect.height, rect.rid, bid=final_packer_bin_id_counter)
+            final_packer_bin_id_counter += 1
+
+        except Exception as e:
+            logger.error(f"Error generating DXF for {container_type} ID {container_id}: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    updated_total_layout_count = total_layout_count_so_far + layouts_generated_this_material
+    logger.info(f"Generated {layouts_generated_this_material} DXF files for material {material}_{thickness}.")
+    return final_packer_for_material, updated_total_layout_count
+
+
+def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", margin=DEFAULT_MARGIN, kerf=DEFAULT_KERF):
+    """
+    Main function to pack details onto material sheets (prioritizing remnants) and generate DXF layout files.
+
+    Args:
+        details_df (pd.DataFrame): DataFrame with details to be packed.
+                                   Required columns: 'thickness_mm', 'material', 'part_id', 'length_mm', 'width_mm', 'quantity'.
+        materials_df (pd.DataFrame): DataFrame with available materials (sheets and remnants).
+                                     Required columns: 'thickness_mm', 'material', 'is_remnant', 'remnant_id',
+                                     'sheet_length_mm', 'sheet_width_mm', 'total_quantity'.
+        pattern_dir (str, optional): Directory for patterns (currently unused in this scope). Defaults to "patterns".
+        margin (float, optional): Default margin for sheet packing. Defaults to DEFAULT_MARGIN.
+        kerf (float, optional): Default kerf (cutter diameter). Defaults to DEFAULT_KERF.
+
+    Returns:
+        tuple[dict, int, int]:
+            - `packers_by_material` (dict): Dictionary mapping material_key to the final `Packer` object for that material.
+            - `total_used_sheets_overall` (int): Total number of full sheets used across all materials.
+            - `total_layout_count` (int): Total number of DXF layout files generated.
+    """
+    # Note: rectpack.MaxRectsBaf and rectpack.MaxRectsBssf are imported within helper functions where needed.
+
+    logger.info("Starting packing process with remnant priority.")
 
     packers_by_material = {}
-    total_used_sheets = 0
-    remnants_manager = RemnantsManager(margin=margin, kerf=kerf)
-    current_materials_df = materials_df.copy()
-    layout_count = 0  # Подсчёт созданных карт раскроя
+    total_used_sheets_overall = 0
+    remnants_manager = RemnantsManager(margin=margin, kerf=kerf) # Used for updating material table with new remnants
+    current_materials_df = materials_df.copy() # Make a copy to modify during processing
+    total_layout_count = 0
 
-    # Проверка наличия обязательных колонок
+    # --- Initial Data Validation ---
     for col in MATERIALS_REQUIRED_COLUMNS:
         if col not in current_materials_df.columns:
-            logger.error(f"Отсутствует колонка '{col}' в materials_df")
+            logger.error(f"Missing required column '{col}' in materials_df.")
             raise ValueError(f"Missing column '{col}' in materials_df")
     for col in DETAILS_REQUIRED_COLUMNS:
         if col not in details_df.columns:
-            logger.error(f"Отсутствует колонка '{col}' в details_df")
+            logger.error(f"Missing required column '{col}' in details_df.")
             raise ValueError(f"Missing column '{col}' in details_df")
 
-    # Добавляем колонку remnant_id, если её нет в таблице материалов
     if 'remnant_id' not in current_materials_df.columns:
-        current_materials_df['remnant_id'] = None
-        logger.info(
-            "Добавлена колонка 'remnant_id' со значением None для исходной таблицы материалов")
+        current_materials_df['remnant_id'] = None # Ensure 'remnant_id' column exists
+        logger.info("Added missing 'remnant_id' column to materials DataFrame, initialized to None.")
 
-    unique_combinations = details_df[[
-        'thickness_mm', 'material']].drop_duplicates()
-    logger.info(
-        f"Найдено {len(unique_combinations)} комбинаций материалов/толщин")
+    # --- Process Each Material Combination ---
+    unique_combinations = details_df[['thickness_mm', 'material']].drop_duplicates()
+    logger.info(f"Found {len(unique_combinations)} unique material/thickness combinations in details.")
 
-    for _, row in unique_combinations.iterrows():
-        thickness = row['thickness_mm']
-        material = row['material']
-        material_key = thickness if material == 'S' else f"{thickness}_{material}"
-        logger.info(
-            f"\nОбработка: толщина={thickness}, материал={material}, ключ={material_key}")
+    for _, combination_row in unique_combinations.iterrows():
+        thickness = combination_row['thickness_mm']
+        material_code = combination_row['material'] # Renamed for clarity
+        material_key = f"{thickness}_{material_code}" if material_code != 'S' else str(thickness)
+        logger.info(f"\nProcessing material combination: Thickness={thickness}, Material='{material_code}' (Key: {material_key})")
 
-        # Выбираем детали для текущей комбинации материал/толщина
-        detail_mask = (details_df['thickness_mm'] == thickness) & (
-            details_df['material'] == material)
-        material_details = details_df[detail_mask].copy()
-        if material_details.empty:
-            logger.info("Нет деталей для этой комбинации")
+        # Filter details and materials for the current combination
+        details_df_mask = (details_df['thickness_mm'] == thickness) & (details_df['material'] == material_code)
+        details_for_current_material = details_df[details_df_mask].copy()
+        if details_for_current_material.empty:
+            logger.info(f"No details found for material key {material_key}.")
             continue
 
-        # Выбираем листы материала для текущей комбинации
-        material_mask = (current_materials_df['thickness_mm'] == thickness) & (
-            current_materials_df['material'] == material)
-        material_sheets = current_materials_df[material_mask].copy()
-        if material_sheets.empty:
-            logger.info("Нет листов материала для этой комбинации")
+        sheets_df_mask = (current_materials_df['thickness_mm'] == thickness) & \
+                         (current_materials_df['material'] == material_code)
+        sheets_for_current_material = current_materials_df[sheets_df_mask].copy()
+        if sheets_for_current_material.empty:
+            logger.info(f"No material sheets/remnants found for material key {material_key}.")
             continue
 
-        # Подготовка деталей для упаковки
-        rects_to_pack = []
-        # Создаем счетчик для уникальных идентификаторов копий деталей
-        unique_id_counter = 0
-        material_details = material_details.reset_index(drop=True)
+        # 1. Prepare Details for Packing (add kerf, create unique IDs)
+        rects_for_current_material = _prepare_details_for_packing(details_for_current_material, kerf)
+        if not rects_for_current_material:
+            logger.info(f"No valid details to pack for material key {material_key} after preparation.")
+            continue
+        rects_for_current_material = hybrid_sort(rects_for_current_material) # Sort details for packing efficiency
 
-        for idx, detail in material_details.iterrows():
-            packing_width = detail['length_mm'] + kerf
-            packing_height = detail['width_mm'] + kerf
-            if packing_width <= 0 or packing_height <= 0:
-                logger.info(
-                    f"Пропуск детали {detail['part_id']}: некорректные размеры {packing_width}x{packing_height}")
-                continue
+        # 2. Prepare Material Sheets (separate remnants and full sheets, calculate packing dimensions)
+        material_remnants, material_remnants_by_id, material_full_sheets = \
+            _prepare_materials(sheets_for_current_material, margin)
 
-            quantity = max(1, int(detail.get('quantity', 1)))
-
-            # Логируем информацию о детали для отладки
-            logger.info(f"Обработка детали ID={detail['part_id']}, " +
-                        f"размеры={detail['length_mm']}x{detail['width_mm']}, " +
-                        f"количество={quantity}")
-
-            # Добавляем каждую копию детали с уникальным ID
-            for q in range(quantity):
-                # Создаем уникальный ID для каждой копии: tuple(idx, unique_id)
-                unique_id = (idx, unique_id_counter)
-                unique_id_counter += 1
-                rects_to_pack.append(
-                    (packing_width, packing_height, unique_id))
-
-                logger.info(f"Добавлена копия {q+1}/{quantity} детали {detail['part_id']} " +
-                            f"с уникальным ID={unique_id}")
-
-        if not rects_to_pack:
-            logger.info("Нет деталей для упаковки")
+        if not material_remnants and not material_full_sheets:
+            logger.info(f"No remnants or full sheets available for material key {material_key}.")
             continue
 
-        logger.info(f"Подготовлено {len(rects_to_pack)} деталей для упаковки")
+        layouts_for_material = [] # Stores ("type", id, packer_instance) for this material
 
-        # Подготовка остатков
-        remnants = []
-        remnant_sheets = material_sheets[material_sheets['is_remnant'] == True].copy(
+        # 3. Pack into Remnants (Phase 1)
+        packed_remnant_layouts, used_remnant_ids = _pack_into_remnants(
+            material_remnants, rects_for_current_material, margin
         )
-        logger.info(f"Найдено {len(remnant_sheets)} типов остатков")
+        layouts_for_material.extend(packed_remnant_layouts)
 
-        # Создаем словарь для просмотра остатков по их ID
-        remnant_by_id = {}
+        # Collect IDs of details packed in remnants to avoid repacking them into full sheets
+        detail_ids_packed_in_remnants = set()
+        for _, _, remnant_packer_instance in packed_remnant_layouts:
+            if len(remnant_packer_instance) > 0 and remnant_packer_instance[0]: # Check if packer has a bin and items
+                for rect in remnant_packer_instance[0]: # Access items in the first (and only) bin
+                    detail_ids_packed_in_remnants.add(rect.rid)
+        logger.info(f"After remnant packing for {material_key}: {len(detail_ids_packed_in_remnants)} detail instances packed.")
 
-        # Добавляем остатки в список
-        for _, row in remnant_sheets.iterrows():
-            # Получаем remnant_id - ключевое значение
-            remnant_id = row.get('remnant_id', None)
-            if remnant_id is None:
-                logger.warning(f"Пропуск остатка без ID: {row}")
-                continue
+        # 4. Pack into Full Sheets (Phase 2)
+        packed_sheet_layouts, used_full_sheets_count = _pack_into_full_sheets(
+            material_full_sheets,
+            rects_for_current_material, # Pass the original full list of rects for this material
+            detail_ids_packed_in_remnants,  # Pass the set of IDs already packed in remnants
+            margin
+        )
+        layouts_for_material.extend(packed_sheet_layouts)
+        total_used_sheets_overall += used_full_sheets_count
 
-            remnant_length = float(row['sheet_length_mm'])
-            remnant_width = float(row['sheet_width_mm'])
-
-            # Проверяем размеры
-            if remnant_length <= 0 or remnant_width <= 0:
-                logger.warning(
-                    f"Пропуск остатка с ID={remnant_id} с некорректными размерами: {remnant_length}x{remnant_width}")
-                continue
-
-            # Добавляем каждый экземпляр остатка
-            for _ in range(int(row['total_quantity'])):
-                remnant = {
-                    'width': remnant_width,
-                    'length': remnant_length,
-                    'remnant_id': remnant_id,
-                    'width_with_margin': remnant_width - 2 * margin,
-                    'length_with_margin': remnant_length - 2 * margin
-                }
-                remnants.append(remnant)
-
-                # Сохраняем для быстрого доступа
-                remnant_by_id[remnant_id] = remnant
-
-            logger.info(
-                f"Добавлен остаток с ID={remnant_id}, размеры={remnant_length}x{remnant_width}")
-
-        logger.info(f"Подготовлено {len(remnants)} остатков")
-
-        # Сортируем остатки по убыванию площади
-        if remnants:
-            remnants.sort(key=lambda x: x['width'] * x['length'], reverse=True)
-            logger.info("Остатки отсортированы по площади (убывание)")
-
-        # Подготовка целых листов
-        full_sheets = []
-        full_sheet_rows = material_sheets[material_sheets['is_remnant'] == False]
-
-        for _, row in full_sheet_rows.iterrows():
-            sheet_length = float(row['sheet_length_mm'])
-            sheet_width = float(row['sheet_width_mm'])
-
-            # Проверяем размеры
-            if sheet_length <= 0 or sheet_width <= 0:
-                logger.warning(
-                    f"Пропуск листа с некорректными размерами: {sheet_length}x{sheet_width}")
-                continue
-
-            # Добавляем каждый экземпляр листа
-            for _ in range(int(row['total_quantity'])):
-                full_sheets.append({
-                    'width': sheet_width,
-                    'length': sheet_length,
-                    'width_with_margin': sheet_width - 2 * margin,
-                    'length_with_margin': sheet_length - 2 * margin
-                })
-
-        logger.info(f"Подготовлено {len(full_sheets)} целых листов")
-
-        if not remnants and not full_sheets:
-            logger.info("Нет контейнеров для упаковки")
+        # 5. Process Layouts: Generate DXF files and create a final packer for the material
+        if not layouts_for_material:
+            logger.info(f"No layouts (packed remnants or sheets) were created for material key {material_key}.")
+            packers_by_material[material_key] = newPacker() # Store an empty packer if no layouts
             continue
 
-        # Сортируем детали для более эффективной упаковки
-        rects_to_pack = hybrid_sort(rects_to_pack)
-
-        # Подготовка упаковщиков
-        # Список упаковщиков (container_type, container_id, packer)
-        all_packers = []
-        used_remnant_ids = set()  # Набор использованных remnant_id
-        used_full_sheets = 0  # Счетчик использованных целых листов
-
-        # ФАЗА 1: Упаковка в остатки
-        logger.info("\nФаза 1: Упаковка в остатки")
-
-        for remnant in remnants:
-            remnant_id = remnant['remnant_id']
-
-            # Создаем отдельный упаковщик для каждого остатка
-            logger.info(f"Создание упаковщика для остатка с ID={remnant_id}")
-            packer = newPacker(rotation=True, pack_algo=MaxRectsBaf)
-
-            # Важно: используем размеры с учетом отступов
-            width_with_margin = remnant['width_with_margin']
-            length_with_margin = remnant['length_with_margin']
-
-            # Добавляем контейнер с размерами за вычетом отступов
-            packer.add_bin(length_with_margin, width_with_margin)
-
-            # Находим неупакованные детали
-            remaining_rects = []
-            packed_ids = set()  # Множество для хранения уже упакованных деталей
-
-            # Соберем все упакованные детали из всех предыдущих контейнеров
-            for p_type, p_id, p in all_packers:
-                if len(p) > 0 and p[0]:  # Проверяем наличие контейнера и деталей
-                    for rect in p[0]:
-                        # rect.rid теперь будет уникальным ID
-                        packed_ids.add(rect.rid)
-
-            # Подробно логируем количество найденных упакованных деталей
-            logger.info(
-                f"Найдено {len(packed_ids)} упакованных деталей из {len(rects_to_pack)} всего")
-
-            # Проверяем каждую деталь из списка подготовленных
-            for w, h, unique_id in rects_to_pack:
-                if unique_id not in packed_ids:
-                    remaining_rects.append((w, h, unique_id))
-
-            logger.info(f"Осталось упаковать {len(remaining_rects)} деталей")
-
-            # Добавляем все неупакованные детали
-            for w, h, idx in remaining_rects:
-                packer.add_rect(w, h, idx)
-
-            # Выполняем упаковку
-            packer.pack()
-
-            # Проверяем, есть ли что-то в упаковщике
-            # Пустой контейнер или нет контейнеров
-            if len(packer) == 0 or not packer[0]:
-                logger.info(
-                    f"Остаток с ID={remnant_id} не использован - не удалось упаковать детали")
-                continue
-
-            # Если упаковка успешна, сохраняем результат
-            logger.info(f"Остаток с ID={remnant_id} успешно использован")
-            all_packers.append(("remnant", remnant_id, packer))
-            used_remnant_ids.add(remnant_id)
-
-        logger.info(f"Использовано остатков: {len(used_remnant_ids)}")
-
-        # ФАЗА 2: Упаковка оставшихся деталей в целые листы
-        logger.info("\nФаза 2: Упаковка в целые листы")
-
-        # Находим все детали, которые уже упакованы
-        packed_rects = set()
-        for p_type, p_id, packer in all_packers:
-            # Проверяем наличие контейнера и деталей
-            if len(packer) > 0 and packer[0]:
-                # Добавляем уникальные ID в множество упакованных деталей
-                for rect in packer[0]:
-                    packed_rects.add(rect.rid)
-
-        logger.info(
-            f"Перед упаковкой на листы: найдено {len(packed_rects)} упакованных деталей")
-
-        # Определяем неупакованные детали - формируем новый список
-        remaining_rects = []
-        for w, h, unique_id in rects_to_pack:
-            if unique_id not in packed_rects:
-                remaining_rects.append((w, h, unique_id))
-
-        logger.info(
-            f"Осталось упаковать на листы: {len(remaining_rects)} деталей")
-
-        if remaining_rects and full_sheets:
-            logger.info(
-                f"Осталось упаковать {len(remaining_rects)} деталей в целые листы")
-
-            # Упаковываем оставшиеся детали в целые листы
-            for i, sheet in enumerate(full_sheets):
-                if not remaining_rects:
-                    break
-
-                # Создаем упаковщик для текущего листа
-                packer = newPacker(rotation=True, pack_algo=MaxRectsBssf)
-
-                # Добавляем контейнер с размерами за вычетом отступов
-                packer.add_bin(sheet['length_with_margin'],
-                               sheet['width_with_margin'])
-
-                # Добавляем все оставшиеся детали
-                for w, h, idx in remaining_rects:
-                    packer.add_rect(w, h, idx)
-
-                # Выполняем упаковку
-                packer.pack()
-
-                # Проверяем, есть ли что-то в упаковщике
-                # Пустой контейнер или нет контейнеров
-                if len(packer) == 0 or not packer[0]:
-                    continue
-
-                # Если упаковка успешна, сохраняем результат
-                sheet_id = i  # Просто индекс листа
-                all_packers.append(("sheet", sheet_id, packer))
-                used_full_sheets += 1
-
-                # Обновляем список упакованных деталей
-                newly_packed_ids = set()
-                for rect in packer[0]:
-                    newly_packed_ids.add(rect.rid)
-
-                # Добавляем в общий список упакованных
-                packed_rects.update(newly_packed_ids)
-
-                # Обновляем список оставшихся деталей - важно пересоздать список полностью
-                remaining_rects_new = []
-                for w, h, unique_id in remaining_rects:
-                    if unique_id not in newly_packed_ids:
-                        remaining_rects_new.append((w, h, unique_id))
-
-                logger.info(
-                    f"Лист {i}: упаковано {len(newly_packed_ids)} деталей, осталось {len(remaining_rects_new)}")
-                remaining_rects = remaining_rects_new  # Заменяем список
-
-        logger.info(f"Использовано целых листов: {used_full_sheets}")
-
-        # ФАЗА 3: Создание DXF файлов и финального упаковщика
-        logger.info("\nФаза 3: Создание DXF файлов")
-
-        # Создаем финальный упаковщик
-        final_packer = newPacker(rotation=True, pack_algo=MaxRectsBssf)
-        bin_counter = 0
-
-        # Обрабатываем каждый упаковщик
-        for container_type, container_id, packer in all_packers:
-            # Пропускаем пустые контейнеры
-            if len(packer) == 0 or not packer[0]:
-                continue
-
-            # Определяем тип контейнера
-            is_remnant = (container_type == "remnant")
-
-            # Получаем информацию о размерах
-            if is_remnant:
-                # Для остатка
-                remnant_id = container_id
-                remnant = remnant_by_id.get(remnant_id)
-                if not remnant:
-                    logger.error(
-                        f"Не найдена информация об остатке с ID={remnant_id}")
-                    continue
-
-                original_width = remnant['width']
-                original_length = remnant['length']
-                width_with_margin = remnant['width_with_margin']
-                length_with_margin = remnant['length_with_margin']
-            else:
-                # Для целого листа
-                sheet_idx = container_id
-                if sheet_idx >= len(full_sheets):
-                    logger.error(
-                        f"Индекс листа {sheet_idx} выходит за пределы списка листов")
-                    continue
-
-                sheet = full_sheets[sheet_idx]
-                original_width = sheet['width']
-                original_length = sheet['length']
-                width_with_margin = sheet['width_with_margin']
-                length_with_margin = sheet['length_with_margin']
-
-            # Создаем DXF документ
-            try:
-                doc, msp = create_new_dxf()
-                add_sheet_outline(msp, original_length, original_width, margin)
-                details_list = []
-
-                # Добавляем все детали в DXF
-                for rect in packer[0]:
-                    # Извлекаем индекс детали из rid (теперь это кортеж (idx, unique_id))
-                    detail_idx = rect.rid[0] if isinstance(
-                        rect.rid, tuple) else rect.rid
-                    detail = material_details.iloc[detail_idx]
-
-                    # Рассчитываем фактические размеры детали (за вычетом kerf)
-                    rect_width = rect.width - kerf
-                    rect_height = rect.height - kerf
-
-                    # Определяем, была ли деталь повернута
-                    orig_width = detail['length_mm']
-                    orig_height = detail['width_mm']
-                    is_rotated = (abs(rect_width - orig_width) >
-                                  0.1) or (abs(rect_height - orig_height) > 0.1)
-
-                    # Создаем информацию о детали для DXF
-                    detail_rect = {
-                        'x': rect.x + margin,
-                        'y': rect.y + margin,
-                        'width': rect_width,
-                        'height': rect_height,
-                        'rotated': is_rotated
-                    }
-
-                    # Добавляем деталь в DXF
-                    detail_info = add_detail_to_sheet(
-                        msp, detail, detail_rect, kerf)
-                    if detail_info:
-                        details_list.append(detail_info)
-
-                    # Выводим информацию о копии детали для отладки
-                    copy_id = rect.rid[1] if isinstance(rect.rid, tuple) else 0
-                    logger.info(f"Добавлена деталь {detail['part_id']} (копия ID: {copy_id}) " +
-                                f"в DXF с размерами {rect_width}x{rect_height}")
-
-                # Формируем имя файла
-                if is_remnant:
-                    # Для остатка используем original remnant_id
-                    # Форматируем ID (убираем .0 в конце для целых значений)
-                    formatted_id = format_remnant_id(remnant_id)
-
-                    # Преобразуем thickness в целое число, если оно целое
-                    thickness_int = int(thickness) if float(
-                        thickness).is_integer() else thickness
-
-                    # Формируем имя файла с целыми значениями размеров
-                    length_int = int(original_length)
-                    width_int = int(original_width)
-
-                    if material != 'S':
-                        output_file = f"{formatted_id}_{length_int}x{width_int}_{thickness_int}mm_{material}.dxf"
-                    else:
-                        output_file = f"{formatted_id}_{length_int}x{width_int}_{thickness_int}mm.dxf"
-
-                    logger.info(
-                        f"Создается карта раскроя для остатка с ID={remnant_id} → {formatted_id}, файл={output_file}")
-                else:
-                    # Для целого листа используем счетчик
-                    sheet_idx = container_id
-
-                    # Преобразуем thickness в целое число, если оно целое
-                    thickness_int = int(thickness) if float(
-                        thickness).is_integer() else thickness
-
-                    if material != 'S':
-                        output_file = f"sheet_{thickness_int}mm_{material}_{sheet_idx}.dxf"
-                    else:
-                        output_file = f"sheet_{thickness_int}mm_{sheet_idx}.dxf"
-                    logger.info(
-                        f"Создается карта раскроя для целого листа: {output_file}")
-
-                # Добавляем заголовок
-                add_layout_filename_title(
-                    msp, original_length, original_width, output_file)
-
-                # Добавляем список деталей БЕЗ имени файла
-                # Не передаем имя файла!
-                add_details_list(msp, original_width, details_list)
-
-                # Сохраняем файл
-                doc.saveas(output_file)
-                logger.info(f"Сохранен файл: {output_file}")
-                layout_count += 1
-
-                # Добавляем контейнер в финальный упаковщик
-                final_packer.add_bin(length_with_margin,
-                                     width_with_margin, bid=bin_counter)
-
-                # Добавляем все детали в финальный упаковщик
-                for rect in packer[0]:
-                    final_packer.add_rect(rect.width, rect.height, rect.rid)
-
-                bin_counter += 1
-
-            except Exception as e:
-                logger.error(
-                    f"Ошибка при создании DXF для контейнера {container_id}: {str(e)}")
-                import traceback
-                logger.error(traceback.format_exc())
-
-        # Устанавливаем финальный упаковщик для этой комбинации материал/толщина
-        packers_by_material[material_key] = final_packer
-
-        # Подсчитываем количество использованных листов
-        total_used_sheets += used_full_sheets
-
-        # Удаляем использованные остатки из таблицы материалов
+        final_packer_for_material, total_layout_count = _generate_dxf_files_for_layouts(
+            layouts_for_material, details_for_current_material,
+            material_full_sheets, material_remnants_by_id,
+            thickness, material_code, margin, kerf, total_layout_count
+        )
+        packers_by_material[material_key] = final_packer_for_material
+
+        # --- Update Material Table (current_materials_df) ---
+        # Remove used remnants
         if used_remnant_ids:
-            logger.info(
-                f"Удаление {len(used_remnant_ids)} использованных остатков из таблицы")
+            logger.info(f"Removing {len(used_remnant_ids)} used remnant types/quantities for material {material_key}.")
+            initial_remnant_rows = len(current_materials_df[
+                (current_materials_df['is_remnant'] == True) &
+                (current_materials_df['thickness_mm'] == thickness) &
+                (current_materials_df['material'] == material_code)
+            ])
 
-            # Создаем маску для строк, которые нужно удалить
-            before_count = len(current_materials_df)
-            delete_mask = (current_materials_df['is_remnant'] == True) & \
-                (current_materials_df['remnant_id'].isin(
-                    list(used_remnant_ids)))
+            # This logic needs to be careful if remnant_ids are not unique per instance in original table
+            # Assuming RemnantsManager handles decrementing quantities or removing rows appropriately.
+            # For now, a simplified removal based on ID:
+            if 'remnant_id' in current_materials_df.columns:
+                # This mask identifies specific remnant entries (by ID, thickness, material) to be removed/adjusted.
+                # A more robust solution might involve RemnantsManager to decrement quantities.
+                delete_mask = (current_materials_df['is_remnant'] == True) & \
+                              (current_materials_df['remnant_id'].isin(list(used_remnant_ids))) & \
+                              (current_materials_df['thickness_mm'] == thickness) & \
+                              (current_materials_df['material'] == material_code)
+                current_materials_df = current_materials_df[~delete_mask] # Keep rows NOT matching the mask
 
-            # Получаем индексы строк, которые нужно удалить
-            delete_indices = current_materials_df[delete_mask].index
+                final_remnant_rows = len(current_materials_df[
+                    (current_materials_df['is_remnant'] == True) &
+                    (current_materials_df['thickness_mm'] == thickness) &
+                    (current_materials_df['material'] == material_code)
+                ])
+                logger.info(f"Removed {initial_remnant_rows - final_remnant_rows} remnant entries for material {material_key}.")
+            else: # Should not happen due to earlier check, but good for safety
+                logger.warning("Cannot remove used remnants: 'remnant_id' column missing.")
 
-            # Удаляем эти строки из таблицы
-            current_materials_df = current_materials_df.drop(delete_indices)
-
-            after_count = len(current_materials_df)
-            logger.info(
-                f"Удалено {before_count - after_count} строк из таблицы материалов")
-
-        # Обновляем таблицу материалов с учетом новых остатков
-        std_material_mask = (
-            (current_materials_df['thickness_mm'] == thickness) &
-            (current_materials_df['material'] == material) &
-            (current_materials_df['is_remnant'] == False)
+        # Add new remnants generated from packed sheets (using RemnantsManager)
+        # Find a standard sheet definition from the *original* materials_df to get its dimensions
+        # This is used by RemnantsManager to know the properties of the sheet from which remnants are cut.
+        std_sheet_mask = (
+            (materials_df['thickness_mm'] == thickness) &
+            (materials_df['material'] == material_code) &
+            (materials_df['is_remnant'] == False)
         )
+        std_sheet_properties = materials_df[std_sheet_mask].iloc[0] if std_sheet_mask.any() else None
 
-        if std_material_mask.any():
-            std_sheet = current_materials_df[std_material_mask].iloc[0]
-            sheet_length = std_sheet['sheet_length_mm']
-            sheet_width = std_sheet['sheet_width_mm']
-
-            # Обновляем таблицу с передачей размеров листа
-            updated_materials = remnants_manager.update_material_table(
-                current_materials_df, final_packer, thickness, material,
-                used_full_sheets, sheet_length, sheet_width)
-            current_materials_df = updated_materials
+        if std_sheet_properties is not None:
+            original_sheet_length = std_sheet_properties['sheet_length_mm']
+            original_sheet_width = std_sheet_properties['sheet_width_mm']
+            current_materials_df = remnants_manager.update_material_table(
+                materials_df_to_update=current_materials_df,
+                packer_with_new_remnants=final_packer_for_material,
+                material_thickness=thickness,
+                material_code=material_code,
+                num_sheets_processed=used_full_sheets_count, # Number of full sheets that might have generated these remnants
+                original_sheet_length=original_sheet_length,
+                original_sheet_width=original_sheet_width
+            )
         else:
             logger.warning(
-                f"Не найдены стандартные листы для толщины {thickness} и материала {material}")
-            updated_materials = remnants_manager.update_material_table(
-                current_materials_df, final_packer, thickness, material, used_full_sheets)
-            current_materials_df = updated_materials
+                f"No standard sheet definition found for material {material_key}. "
+                "Cannot accurately update new remnants based on original sheet dimensions. "
+                "Updating remnants without original sheet context."
+            )
+            current_materials_df = remnants_manager.update_material_table(
+                materials_df_to_update=current_materials_df,
+                packer_with_new_remnants=final_packer_for_material,
+                material_thickness=thickness,
+                material_code=material_code,
+                num_sheets_processed=used_full_sheets_count
+                # sheet_length and sheet_width omitted, RemnantsManager should handle this case
+            )
 
-    # Перед сохранением таблицы проверяем наличие колонки remnant_id
-    if 'remnant_id' not in current_materials_df.columns:
+    # --- Final Operations ---
+    if 'remnant_id' not in current_materials_df.columns: # Should be redundant given earlier checks
         current_materials_df['remnant_id'] = None
-        logger.warning(
-            "Перед сохранением добавлена отсутствующая колонка 'remnant_id'")
+        logger.warning("Final check: 'remnant_id' column was missing and has been added before saving.")
 
-    # Выводим итоговую статистику
-    remnants_count = sum(
-        1 for _, row in current_materials_df.iterrows() if row.get('is_remnant', False))
-    logger.info(f"Итоговое количество остатков в таблице: {remnants_count}")
+    final_remnant_count = sum(1 for _, r_row in current_materials_df.iterrows() if r_row.get('is_remnant', False))
+    logger.info(f"Total remnants in the updated materials table: {final_remnant_count}")
 
-    # Сохраняем обновленную таблицу материалов
-    remnants_manager.save_material_table(
-        current_materials_df, "updated_materials.csv")
+    # Save the updated materials table (with used remnants removed and new ones added)
+    remnants_manager.save_material_table(current_materials_df, "updated_materials.csv")
 
     logger.info(
-        f"Упаковка завершена. Всего листов: {total_used_sheets}, карт раскроя: {layout_count}")
-    logger.info(f"Всего остатков в обновленной таблице: {remnants_count}")
+        f"Packing process completed. "
+        f"Total full sheets used: {total_used_sheets_overall}, "
+        f"Total DXF layouts generated: {total_layout_count}."
+    )
+    logger.info(f"Final count of all remnant entries in 'updated_materials.csv': {final_remnant_count}.")
 
-    return packers_by_material, total_used_sheets, layout_count
+    return packers_by_material, total_used_sheets_overall, total_layout_count

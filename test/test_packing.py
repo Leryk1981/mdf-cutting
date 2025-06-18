@@ -1,7 +1,7 @@
 import os
 from rectpack import newPacker, MaxRectsBlsf, MaxRectsBaf, GuillotineBssfSas, SkylineBl
-from .config import logger
-from .dxf_generator import (
+from .config import logger # Assuming test/config.py exists and is intended
+from packer.dxf_writer import ( # Updated import path
     create_new_dxf,
     add_sheet_outline,
     add_detail_to_sheet,
