@@ -10,6 +10,7 @@ from .dxf_generator import (
     add_details_list
 )
 from .remnants import RemnantsManager
+from .file_organizer import get_organized_file_path
 from .constants import (
     MATERIALS_REQUIRED_COLUMNS,
     DETAILS_REQUIRED_COLUMNS,
@@ -533,9 +534,12 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                 # Не передаем имя файла!
                 add_details_list(msp, original_width, details_list)
 
-                # Сохраняем файл
-                doc.saveas(output_file)
-                logger.info(f"Сохранен файл: {output_file}")
+                # Получаем полный путь с учетом организации по папкам
+                organized_file_path = get_organized_file_path(thickness, material, output_file)
+                
+                # Сохраняем файл в организованную структуру папок
+                doc.saveas(organized_file_path)
+                logger.info(f"Сохранен файл в организованную структуру: {organized_file_path}")
                 layout_count += 1
 
                 # Добавляем контейнер в финальный упаковщик
