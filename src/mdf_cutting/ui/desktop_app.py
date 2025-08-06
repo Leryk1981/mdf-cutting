@@ -15,6 +15,11 @@ from ..utils.math_utils import (
     MATERIALS_REQUIRED_COLUMNS,
 )
 
+# AI интеграция
+from ..integration.ai_integration_service import AIIntegrationService
+from .ai_enhanced.styles import AIStyles
+from .ai_enhanced.ai_control_panel import ImprovedAIControlPanel
+
 
 class CuttingApp:
     """Графический интерфейс приложения"""
@@ -29,6 +34,10 @@ class CuttingApp:
         self.remnants_manager = RemnantsManager()
         self.packing_algorithm = PackingAlgorithm()
         self.cutting_thread = None  # Атрибут для хранения потока
+        
+        # AI интеграция
+        self.ai_service = AIIntegrationService()
+        AIStyles.setup_ai_styles()
 
         # Пути по умолчанию
         if getattr(sys, "frozen", False):
@@ -55,6 +64,9 @@ class CuttingApp:
         self.create_options_frame()
         self.create_log_frame()
         self.create_action_frame()
+        
+        # Добавляем AI панель
+        self.setup_ai_integration()
 
         # Проверяем наличие файлов
         self.check_files()
@@ -623,3 +635,119 @@ class CuttingApp:
         """Завершает процесс раскроя и обновляет интерфейс"""
         self.run_button.config(state="normal")
         self.status_label.config(text="Готов к запуску")
+
+    def setup_ai_integration(self):
+        """Настройка интеграции AI"""
+        # Создание вкладки для AI
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Основная вкладка
+        self.main_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.main_frame, text="Основная")
+        
+        # Перемещаем существующие фреймы в основную вкладку
+        for child in self.root.winfo_children():
+            if isinstance(child, ttk.LabelFrame) or isinstance(child, ttk.Frame):
+                child.pack_forget()
+                child.master = self.main_frame
+                child.pack(fill=tk.X, expand=False, padx=10, pady=5)
+        
+        # AI вкладка
+        self.ai_panel = ImprovedAIControlPanel(self.notebook, self.ai_service, self)
+        self.notebook.add(self.ai_panel, text="🤖 AI Оптимизация")
+        
+        # Добавляем AI кнопки в панель действий
+        self.add_ai_buttons()
+    
+    def add_ai_buttons(self):
+        """Добавление AI кнопок в панель действий"""
+        # Находим фрейм действий
+        for child in self.main_frame.winfo_children():
+            if isinstance(child, ttk.LabelFrame) and "Действия" in child.cget('text'):
+                action_frame = child
+                break
+        else:
+            return
+        
+        # Добавляем разделитель
+        separator = ttk.Separator(action_frame, orient=tk.VERTICAL)
+        separator.pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        
+        # AI кнопки
+        ai_frame = ttk.Frame(action_frame)
+        ai_frame.pack(side=tk.LEFT, padx=5)
+        
+        self.quick_ai_btn = ttk.Button(
+            ai_frame,
+            text="🚀 AI Оптимизировать",
+            command=self.quick_ai_optimize,
+            style='AI.Primary.TButton'
+        )
+        self.quick_ai_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.leftover_ai_btn = ttk.Button(
+            ai_frame,
+            text="♻️ AI + Остатки",
+            command=self.quick_leftover_optimize,
+            style='AI.Success.TButton'
+        )
+        self.leftover_ai_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Индикатор AI статуса
+        self.ai_status_label = ttk.Label(
+            ai_frame,
+            text="●",
+            foreground=AIStyles.COLORS['success'],
+            font=('TkDefaultFont', 10, 'bold')
+        )
+        self.ai_status_label.pack(side=tk.LEFT, padx=(5, 0))
+    
+    def quick_ai_optimize(self):
+        """Быстрая AI оптимизация"""
+        # Переключиться на вкладку AI
+        self.notebook.select(1)  # Индекс вкладки AI
+        self.ai_panel.optimize_with_ai()
+        self.ai_status_label.config(text="●", foreground=AIStyles.COLORS['warning'])
+    
+    def quick_leftover_optimize(self):
+        """Быстрая оптимизация с остатками"""
+        self.notebook.select(1)
+        self.ai_panel.optimize_with_leftovers()
+        self.ai_status_label.config(text="●", foreground=AIStyles.COLORS['warning'])
+    
+    def get_pieces_data(self):
+        """Получение данных деталей для AI"""
+        try:
+            if hasattr(self, 'data_manager') and self.data_manager.details_data is not None:
+                return self.data_manager.details_data.to_dict('records')
+            return []
+        except Exception:
+            return []
+    
+    def get_material_code(self):
+        """Получение кода материала"""
+        try:
+            if hasattr(self, 'data_manager') and self.data_manager.materials_data is not None:
+                return self.data_manager.materials_data.iloc[0]['material_code']
+            return "MDF16"
+        except Exception:
+            return "MDF16"
+    
+    def get_material_thickness(self):
+        """Получение толщины материала"""
+        try:
+            if hasattr(self, 'data_manager') and self.data_manager.materials_data is not None:
+                return float(self.data_manager.materials_data.iloc[0]['thickness'])
+            return 16.0
+        except Exception:
+            return 16.0
+    
+    def update_dxf_display(self, dxf_data):
+        """Обновление отображения DXF (заглушка)"""
+        if dxf_data:
+            logger.info("DXF данные обновлены AI")
+    
+    def apply_correction(self, suggestion_data):
+        """Применение AI корректировки (заглушка)"""
+        logger.info(f"Применена корректировка: {suggestion_data.get('correction_type')}")
