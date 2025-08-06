@@ -1,19 +1,18 @@
-import os
-import sys
+"""
+Главный модуль приложения.
+
+Запускает GUI приложение для оптимизации раскроя МДФ.
+"""
+
 import tkinter as tk
 
-from packer.config import setup_logging
-from packer.gui import CuttingAppGUI
+from mdf_cutting.ui.desktop_app import CuttingApp
 
 
 def main():
-    """Основная функция запуска приложения"""
-    # Настраиваем логирование
-    setup_logging()
-
-    # Запускаем интерфейс
+    """Главная функция приложения."""
     root = tk.Tk()
-    app = CuttingAppGUI(root)
+    CuttingApp(root)
     root.mainloop()
 
 

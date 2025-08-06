@@ -10,7 +10,7 @@
 TODO: Реализовать полный парсер DXF
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
 
 import ezdxf
 import numpy as np

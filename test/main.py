@@ -1,14 +1,22 @@
+import glob
 import os
 import sys
-import glob
+
 import pandas as pd
-from packer.utils import preprocess_dataframes, set_log_level
+
 from packer.constants import SUPPORTED_ENCODINGS
 from packer.test_packing import test_maxrects_blsf, test_various_algorithms
+from packer.utils import preprocess_dataframes, set_log_level
 
 # Расширенный список кодировок для попыток чтения
-EXTENDED_ENCODINGS = ['utf-8', 'utf-8-sig',
-                      'windows-1251', 'cp1252', 'latin1', 'iso-8859-1']
+EXTENDED_ENCODINGS = [
+    "utf-8",
+    "utf-8-sig",
+    "windows-1251",
+    "cp1252",
+    "latin1",
+    "iso-8859-1",
+]
 
 
 def read_csv_with_encoding(file_path):
@@ -16,8 +24,9 @@ def read_csv_with_encoding(file_path):
     for encoding in EXTENDED_ENCODINGS:
         try:
             print(f"Пробуем кодировку {encoding} для {file_path}")
-            df = pd.read_csv(file_path, sep=';',
-                             encoding=encoding, low_memory=False)
+            df = pd.read_csv(
+                file_path, sep=";", encoding=encoding, low_memory=False
+            )
             print(f"Успешно прочитан файл с кодировкой: {encoding}")
             return df
         except Exception as e:
@@ -26,8 +35,13 @@ def read_csv_with_encoding(file_path):
     # Последняя попытка - чтение с опцией errors='replace'
     try:
         print("Попытка чтения с опцией errors='replace'")
-        df = pd.read_csv(file_path, sep=';', encoding='utf-8',
-                         errors='replace', low_memory=False)
+        df = pd.read_csv(
+            file_path,
+            sep=";",
+            encoding="utf-8",
+            errors="replace",
+            low_memory=False,
+        )
         print("Успешно прочитан файл с заменой проблемных символов")
         return df
     except Exception as e:
@@ -38,9 +52,9 @@ def read_csv_with_encoding(file_path):
 
 def main():
     # Определение базовой директории
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         # Работаем из EXE
-        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
     else:
         # Работаем из скрипта
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -98,46 +112,74 @@ def main():
         return
 
     # Проверка наличия колонки is_remnant
-    if 'is_remnant' not in materials_df.columns:
-        materials_df['is_remnant'] = False
+    if "is_remnant" not in materials_df.columns:
+        materials_df["is_remnant"] = False
         print("Добавлена колонка 'is_remnant' со значением False")
 
     # Запуск тестирования алгоритмов
-    print("\n=== Запуск тестирования алгоритма MAXRECTS-BLSF с разными сортировками ===")
+    print(
+        "\n=== Запуск тестирования алгоритма MAXRECTS-BLSF с разными сортировками ==="
+    )
 
     # Включаем режим принудительного поворота больших деталей
     force_rotate_large = True
-    rotate_text = "с принудительным поворотом больших деталей" if force_rotate_large else "без принудительного поворота"
+    rotate_text = (
+        "с принудительным поворотом больших деталей"
+        if force_rotate_large
+        else "без принудительного поворота"
+    )
 
     # Тест с сортировкой "big_first"
     print(
-        f"\n>> Тест с сортировкой 'big_first' (сначала большие детали) {rotate_text}:")
+        f"\n>> Тест с сортировкой 'big_first' (сначала большие детали) {rotate_text}:"
+    )
     packers1, used_sheets1, layout_count1 = test_maxrects_blsf(
-        details_df, materials_df, output_dir, margin=6, kerf=4,
-        sort_mode="big_first", force_rotate_large=force_rotate_large)
+        details_df,
+        materials_df,
+        output_dir,
+        margin=6,
+        kerf=4,
+        sort_mode="big_first",
+        force_rotate_large=force_rotate_large,
+    )
 
     # Тест с сортировкой "medium_first"
     print(
-        f"\n>> Тест с сортировкой 'medium_first' (сначала средние детали) {rotate_text}:")
+        f"\n>> Тест с сортировкой 'medium_first' (сначала средние детали) {rotate_text}:"
+    )
     packers2, used_sheets2, layout_count2 = test_maxrects_blsf(
-        details_df, materials_df, output_dir, margin=6, kerf=4,
-        sort_mode="medium_first", force_rotate_large=force_rotate_large)
+        details_df,
+        materials_df,
+        output_dir,
+        margin=6,
+        kerf=4,
+        sort_mode="medium_first",
+        force_rotate_large=force_rotate_large,
+    )
 
     # Сравнение результатов
     print("\n=== Сравнение результатов сортировок ===")
     print(
-        f"big_first {rotate_text}: {used_sheets1} листов, {layout_count1} карт раскроя")
+        f"big_first {rotate_text}: {used_sheets1} листов, {layout_count1} карт раскроя"
+    )
     print(
-        f"medium_first {rotate_text}: {used_sheets2} листов, {layout_count2} карт раскроя")
+        f"medium_first {rotate_text}: {used_sheets2} листов, {layout_count2} карт раскроя"
+    )
 
     # Тест разных алгоритмов упаковки
     run_algorithm_comparison = True
     if run_algorithm_comparison:
         print(
-            f"\n=== Запуск сравнительного тестирования различных алгоритмов упаковки {rotate_text} ===")
+            f"\n=== Запуск сравнительного тестирования различных алгоритмов упаковки {rotate_text} ==="
+        )
         results = test_various_algorithms(
-            details_df, materials_df, output_dir, margin=6, kerf=4,
-            force_rotate_large=force_rotate_large)
+            details_df,
+            materials_df,
+            output_dir,
+            margin=6,
+            kerf=4,
+            force_rotate_large=force_rotate_large,
+        )
 
         # Вывод итоговой таблицы
         print(f"\n=== Итоговые результаты всех тестов {rotate_text} ===")
@@ -149,7 +191,8 @@ def main():
         for algo_name, result in results.items():
             if algo_name != "MaxRectsBlsf":  # Избегаем дублирования
                 print(
-                    f"| {algo_name} | {result['total_sheets']} | {result['layout_count']} |")
+                    f"| {algo_name} | {result['total_sheets']} | {result['layout_count']} |"
+                )
 
 
 if __name__ == "__main__":

@@ -7,8 +7,7 @@
 - Оптимизацию использования материалов
 """
 
-import os
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 
 class RemnantsManager:

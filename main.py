@@ -1,6 +1,7 @@
 import os
 import sys
 import tkinter as tk
+
 from packer.config import setup_logging
 from packer.gui import CuttingAppGUI
 

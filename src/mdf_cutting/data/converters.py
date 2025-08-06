@@ -10,7 +10,7 @@
 TODO: Реализовать все конвертеры
 """
 
-from typing import List
+from typing import Dict
 
 
 class FormatConverter:

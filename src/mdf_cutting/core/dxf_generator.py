@@ -1,9 +1,5 @@
 import os.path
-import re
 from typing import Dict
-
-import ezdxf
-from ezdxf.filemanagement import new
 
 from ..utils.config import logger
 
@@ -279,7 +275,7 @@ def add_bevel_lines(
 
             msp.add_lwpolyline(points, dxfattribs=layer_attributes)
             logger.info(
-                f"Добавлена замкнутая полилиния фаски по всему периметру"
+                "Добавлена замкнутая полилиния фаски по всему периметру"
             )
             return  # Выходим из функции, так как фаска уже нарисована
 

@@ -10,7 +10,7 @@
 TODO: Реализовать систему валидации
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict
 
 
 class LayoutValidator:

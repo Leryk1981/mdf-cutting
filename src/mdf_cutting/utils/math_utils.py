@@ -7,7 +7,6 @@
 - Математические вычисления
 """
 
-import math
 from typing import Dict, List, Tuple
 
 # Константы для системы раскроя

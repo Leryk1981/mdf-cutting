@@ -1,35 +1,50 @@
+"""
+Конфигурация системы логирования.
+
+Этот модуль содержит:
+- Настройку логирования
+- Конфигурационные параметры
+- Утилиты для работы с конфигурацией
+"""
+
 import logging
-import os
-
-# Файл логирования
-LOG_FILE = "packer.log"
-
-# Настройка логирования
+from typing import Optional
 
 
-def setup_logging():
-    """Настраивает логирование приложения"""
-    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    logger = logging.getLogger("packer")
-    logger.setLevel(logging.INFO)
+def setup_logging(
+    level: str = "INFO", log_file: Optional[str] = None
+) -> logging.Logger:
+    """
+    Настройка системы логирования.
 
-    # Удаляем все существующие обработчики логов
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-        handler.close()
+    Args:
+        level: Уровень логирования
+        log_file: Путь к файлу логов (опционально)
 
-    # Добавляем файловый обработчик
-    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8", mode="w")
-    file_handler.setFormatter(logging.Formatter(log_format))
+    Returns:
+        logging.Logger: Настроенный логгер
+    """
+    logger = logging.getLogger("mdf_cutting")
+    logger.setLevel(getattr(logging, level.upper()))
 
-    # Добавляем консольный обработчик
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(logging.Formatter(log_format))
+    # Создаем форматтер
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
+    # Добавляем обработчик для консоли
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # Добавляем обработчик для файла если указан
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
     return logger
 
 
-logger = logging.getLogger("packer")
+# Создаем основной логгер
+logger = setup_logging()

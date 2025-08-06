@@ -10,9 +10,7 @@
 TODO: Реализовать систему сбора данных
 """
 
-from typing import Dict, List, Optional
-
-import pandas as pd
+from typing import Dict, List
 
 
 class DataCollector:

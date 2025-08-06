@@ -4,8 +4,6 @@
 Тестирует основные алгоритмы упаковки и оптимизации.
 """
 
-import pytest
-
 from src.mdf_cutting.core.optimizer import CuttingOptimizer
 
 

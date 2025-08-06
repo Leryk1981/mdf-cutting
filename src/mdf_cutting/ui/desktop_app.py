@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from ..core.packing import PackingAlgorithm
 from ..core.remnants import RemnantsManager
 from ..data.managers import DataManager
-from ..utils.config import logger, setup_logging
+from ..utils.config import logger
 from ..utils.math_utils import (
     DEFAULT_KERF,
     DEFAULT_MARGIN,
@@ -404,13 +404,15 @@ class CuttingApp:
                 return
 
             # Проверяем наличие необходимых колонок
-            is_valid, missing_cols_details, missing_cols_materials = (
-                self.data_manager.validate_dataframes(
-                    details_df,
-                    materials_df,
-                    DETAILS_REQUIRED_COLUMNS,
-                    MATERIALS_REQUIRED_COLUMNS,
-                )
+            (
+                is_valid,
+                missing_cols_details,
+                missing_cols_materials,
+            ) = self.data_manager.validate_dataframes(
+                details_df,
+                materials_df,
+                DETAILS_REQUIRED_COLUMNS,
+                MATERIALS_REQUIRED_COLUMNS,
             )
 
             if not is_valid:
@@ -462,14 +464,16 @@ class CuttingApp:
 
             # Запускаем раскрой
             logger.info("Начинается процесс раскроя")
-            packers_by_material, total_used_sheets, layout_count = (
-                self.packing_algorithm.pack_and_generate_dxf(
-                    details_df,
-                    materials_df,
-                    pattern_dir,
-                    int(margin),
-                    int(kerf),
-                )
+            (
+                packers_by_material,
+                total_used_sheets,
+                layout_count,
+            ) = self.packing_algorithm.pack_and_generate_dxf(
+                details_df,
+                materials_df,
+                pattern_dir,
+                int(margin),
+                int(kerf),
             )
 
             # Обновляем таблицу материалов с учетом использованных листов и остатков
@@ -484,9 +488,7 @@ class CuttingApp:
                     # Обрабатываем разные типы ключей (строка или число)
                     if isinstance(material_key, (float, int)) or (
                         hasattr(material_key, "dtype")
-                        and isinstance(
-                            material_key.dtype, (np.float64, np.int64)
-                        )
+                        and str(material_key.dtype) in ("float64", "int64")
                     ):
                         # Если ключ - число, то толщина = ключ, материал = 'S' по умолчанию
                         thickness = float(material_key)

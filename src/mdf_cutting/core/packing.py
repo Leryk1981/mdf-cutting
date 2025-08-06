@@ -1,7 +1,6 @@
-import os
 from typing import Dict, List
 
-from rectpack import MaxRectsBssf, newPacker
+from rectpack import newPacker
 
 from ..data.managers import get_organized_file_path
 from ..utils.config import logger
@@ -18,7 +17,6 @@ from .dxf_generator import (
     add_sheet_outline,
     create_new_dxf,
 )
-from .patterns import load_patterns
 from .remnants import RemnantsManager
 
 

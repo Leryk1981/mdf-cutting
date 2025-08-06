@@ -12,8 +12,6 @@ TODO: Реализовать ML-модель
 
 from typing import Dict, List, Optional
 
-import numpy as np
-
 
 class CuttingOptimizer:
     """

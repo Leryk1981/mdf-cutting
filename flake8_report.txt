@@ -1,0 +1,116 @@
+src/mdf_cutting\__init__.py:5: [E501] line too long (85 > 79 characters)
+src/mdf_cutting\ai_module\data_collector.py:13: [F401] 'typing.Optional' imported but unused
+src/mdf_cutting\ai_module\data_collector.py:15: [F401] 'pandas as pd' imported but unused
+src/mdf_cutting\ai_module\dxf_parser.py:13: [F401] 'typing.List' imported but unused
+src/mdf_cutting\ai_module\dxf_parser.py:13: [F401] 'typing.Optional' imported but unused
+src/mdf_cutting\ai_module\dxf_parser.py:13: [F401] 'typing.Tuple' imported but unused
+src/mdf_cutting\ai_module\ml_model.py:15: [F401] 'numpy as np' imported but unused
+src/mdf_cutting\ai_module\validator.py:13: [F401] 'typing.List' imported but unused
+src/mdf_cutting\ai_module\validator.py:13: [F401] 'typing.Tuple' imported but unused
+src/mdf_cutting\core\dxf_generator.py:2: [F401] 're' imported but unused
+src/mdf_cutting\core\dxf_generator.py:5: [F401] 'ezdxf' imported but unused
+src/mdf_cutting\core\dxf_generator.py:52: [E501] line too long (83 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:107: [E501] line too long (106 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:117: [E501] line too long (101 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:118: [E501] line too long (104 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:119: [E501] line too long (89 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:129: [E501] line too long (80 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:155: [E741] ambiguous variable name 'l'
+src/mdf_cutting\core\dxf_generator.py:191: [E501] line too long (82 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:253: [E501] line too long (92 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:257: [E501] line too long (90 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:261: [E501] line too long (95 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:282: [F541] f-string is missing placeholders
+src/mdf_cutting\core\dxf_generator.py:287: [E501] line too long (81 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:290: [E501] line too long (90 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:396: [E501] line too long (80 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:413: [E722] do not use bare 'except'
+src/mdf_cutting\core\dxf_generator.py:419: [E722] do not use bare 'except'
+src/mdf_cutting\core\dxf_generator.py:421: [E501] line too long (88 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:453: [F841] local variable 'start_y' is assigned to but never used
+src/mdf_cutting\core\dxf_generator.py:477: [E501] line too long (91 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:558: [E501] line too long (83 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:581: [E501] line too long (88 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:662: [E501] line too long (101 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:666: [E501] line too long (85 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:694: [E501] line too long (100 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:701: [E501] line too long (103 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:742: [E501] line too long (88 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:774: [E501] line too long (89 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:798: [E501] line too long (88 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:804: [E501] line too long (88 > 79 characters)
+src/mdf_cutting\core\dxf_generator.py:812: [E501] line too long (80 > 79 characters)
+src/mdf_cutting\core\packing.py:1: [F401] 'os' imported but unused
+src/mdf_cutting\core\packing.py:4: [F401] 'rectpack.MaxRectsBssf' imported but unused
+src/mdf_cutting\core\packing.py:21: [F401] '.patterns.load_patterns' imported but unused
+src/mdf_cutting\core\packing.py:56: [E501] line too long (95 > 79 characters)
+src/mdf_cutting\core\packing.py:95: [E501] line too long (91 > 79 characters)
+src/mdf_cutting\core\packing.py:126: [E501] line too long (95 > 79 characters)
+src/mdf_cutting\core\packing.py:129: [F811] redefinition of unused 'MaxRectsBssf' from line 4
+src/mdf_cutting\core\packing.py:154: [E501] line too long (94 > 79 characters)
+src/mdf_cutting\core\packing.py:171: [E501] line too long (89 > 79 characters)
+src/mdf_cutting\core\packing.py:203: [E501] line too long (112 > 79 characters)
+src/mdf_cutting\core\packing.py:226: [E501] line too long (83 > 79 characters)
+src/mdf_cutting\core\packing.py:239: [E712] comparison to True should be 'if cond is True:' or 'if cond:'
+src/mdf_cutting\core\packing.py:260: [E501] line too long (116 > 79 characters)
+src/mdf_cutting\core\packing.py:279: [E501] line too long (95 > 79 characters)
+src/mdf_cutting\core\packing.py:292: [E712] comparison to False should be 'if cond is False:' or 'if not cond:'
+src/mdf_cutting\core\packing.py:302: [E501] line too long (92 > 79 characters)
+src/mdf_cutting\core\packing.py:366: [E501] line too long (94 > 79 characters)
+src/mdf_cutting\core\packing.py:387: [E501] line too long (93 > 79 characters)
+src/mdf_cutting\core\packing.py:411: [E501] line too long (88 > 79 characters)
+src/mdf_cutting\core\packing.py:426: [E501] line too long (82 > 79 characters)
+src/mdf_cutting\core\packing.py:467: [E501] line too long (90 > 79 characters)
+src/mdf_cutting\core\packing.py:474: [E501] line too long (111 > 79 characters)
+src/mdf_cutting\core\packing.py:516: [E501] line too long (84 > 79 characters)
+src/mdf_cutting\core\packing.py:534: [E501] line too long (89 > 79 characters)
+src/mdf_cutting\core\packing.py:572: [E501] line too long (86 > 79 characters)
+src/mdf_cutting\core\packing.py:594: [E501] line too long (113 > 79 characters)
+src/mdf_cutting\core\packing.py:596: [E501] line too long (102 > 79 characters)
+src/mdf_cutting\core\packing.py:599: [E501] line too long (117 > 79 characters)
+src/mdf_cutting\core\packing.py:613: [E501] line too long (91 > 79 characters)
+src/mdf_cutting\core\packing.py:619: [E501] line too long (82 > 79 characters)
+src/mdf_cutting\core\packing.py:639: [E501] line too long (86 > 79 characters)
+src/mdf_cutting\core\packing.py:656: [E501] line too long (86 > 79 characters)
+src/mdf_cutting\core\packing.py:662: [E501] line too long (80 > 79 characters)
+src/mdf_cutting\core\packing.py:671: [E501] line too long (86 > 79 characters)
+src/mdf_cutting\core\packing.py:676: [E712] comparison to True should be 'if cond is True:' or 'if cond:'
+src/mdf_cutting\core\packing.py:688: [E501] line too long (83 > 79 characters)
+src/mdf_cutting\core\packing.py:695: [E712] comparison to False should be 'if cond is False:' or 'if not cond:'
+src/mdf_cutting\core\packing.py:716: [E501] line too long (94 > 79 characters)
+src/mdf_cutting\core\packing.py:748: [E501] line too long (94 > 79 characters)
+src/mdf_cutting\core\patterns.py:11: [F401] 'typing.List' imported but unused
+src/mdf_cutting\core\patterns.py:32: [F841] local variable 'file_path' is assigned to but never used
+src/mdf_cutting\core\remnants.py:10: [F401] 'os' imported but unused
+src/mdf_cutting\core\remnants.py:11: [F401] 'typing.Tuple' imported but unused
+src/mdf_cutting\data\converters.py:13: [F401] 'typing.List' imported but unused
+src/mdf_cutting\data\managers.py:85: [E501] line too long (89 > 79 characters)
+src/mdf_cutting\main.py:1: [F401] 'os' imported but unused
+src/mdf_cutting\main.py:2: [F401] 'sys' imported but unused
+src/mdf_cutting\main.py:16: [F841] local variable 'app' is assigned to but never used
+src/mdf_cutting\ui\desktop_app.py:10: [F401] '..utils.config.setup_logging' imported but unused
+src/mdf_cutting\ui\desktop_app.py:311: [E501] line too long (80 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:323: [E501] line too long (89 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:328: [E501] line too long (80 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:353: [E501] line too long (87 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:359: [E501] line too long (103 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:423: [E501] line too long (95 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:475: [E501] line too long (84 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:488: [F821] undefined name 'np'
+src/mdf_cutting\ui\desktop_app.py:488: [F821] undefined name 'np'
+src/mdf_cutting\ui\desktop_app.py:491: [E501] line too long (91 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:495: [E501] line too long (116 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:498: [E501] line too long (81 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:513: [E501] line too long (88 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:518: [E501] line too long (102 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:529: [E501] line too long (107 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:544: [E501] line too long (143 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:548: [E501] line too long (83 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:556: [E501] line too long (138 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:572: [E501] line too long (91 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:595: [E501] line too long (107 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:602: [E501] line too long (110 > 79 characters)
+src/mdf_cutting\ui\desktop_app.py:613: [F821] undefined name 'e'
+src/mdf_cutting\utils\config.py:2: [F401] 'os' imported but unused
+src/mdf_cutting\utils\math_utils.py:10: [F401] 'math' imported but unused
+tests/test_core.py:7: [F401] 'pytest' imported but unused

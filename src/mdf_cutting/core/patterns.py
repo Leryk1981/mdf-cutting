@@ -8,7 +8,7 @@
 """
 
 import os
-from typing import Dict, List
+from typing import Dict
 
 
 def load_patterns(pattern_dir: str = "patterns") -> Dict:
@@ -29,7 +29,6 @@ def load_patterns(pattern_dir: str = "patterns") -> Dict:
     try:
         for filename in os.listdir(pattern_dir):
             if filename.endswith(".txt") or filename.endswith(".json"):
-                file_path = os.path.join(pattern_dir, filename)
                 # TODO: Реализовать загрузку узоров
                 patterns[filename] = {}
     except Exception as e:

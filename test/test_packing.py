@@ -1,16 +1,21 @@
 import os
-from rectpack import newPacker, MaxRectsBlsf, MaxRectsBaf, GuillotineBssfSas, SkylineBl
-from .config import logger
-from .dxf_generator import (
-    create_new_dxf,
-    add_sheet_outline,
-    add_detail_to_sheet,
-    add_layout_filename_title,
-    add_details_list
+
+from rectpack import (
+    GuillotineBssfSas,
+    MaxRectsBaf,
+    MaxRectsBlsf,
+    SkylineBl,
+    newPacker,
 )
-from .constants import (
-    DEFAULT_MARGIN,
-    DEFAULT_KERF
+
+from .config import logger
+from .constants import DEFAULT_KERF, DEFAULT_MARGIN
+from .dxf_generator import (
+    add_detail_to_sheet,
+    add_details_list,
+    add_layout_filename_title,
+    add_sheet_outline,
+    create_new_dxf,
 )
 
 
@@ -25,14 +30,17 @@ def hybrid_sort_big_first(rectangles):
             small.append((w, h, idx))
         else:
             medium.append((w, h, idx))
-    return (sorted(large, key=lambda x: -x[0]) +
-            sorted(medium, key=lambda x: -(x[0] * x[1])) +
-            sorted(small, key=lambda x: (-x[0], -x[1])))
+    return (
+        sorted(large, key=lambda x: -x[0])
+        + sorted(medium, key=lambda x: -(x[0] * x[1]))
+        + sorted(small, key=lambda x: (-x[0], -x[1]))
+    )
 
 
 def hybrid_sort_medium_first(rectangles):
     """Сортировка деталей для оптимальной упаковки.
-    Сначала средние детали, потом большие, потом маленькие (исходный вариант)."""
+    Сначала средние детали, потом большие, потом маленькие (исходный вариант).
+    """
     medium, large, small = [], [], []
     for w, h, idx in rectangles:
         if w > 2000:
@@ -41,12 +49,16 @@ def hybrid_sort_medium_first(rectangles):
             small.append((w, h, idx))
         else:
             medium.append((w, h, idx))
-    return (sorted(medium, key=lambda x: -(x[0] * x[1])) +
-            sorted(large, key=lambda x: -x[0]) +
-            sorted(small, key=lambda x: (-x[0], -x[1])))
+    return (
+        sorted(medium, key=lambda x: -(x[0] * x[1]))
+        + sorted(large, key=lambda x: -x[0])
+        + sorted(small, key=lambda x: (-x[0], -x[1]))
+    )
 
 
-def prepare_rectangles_for_packing(material_details, kerf, force_rotate_large=True):
+def prepare_rectangles_for_packing(
+    material_details, kerf, force_rotate_large=True
+):
     """
     Подготовка прямоугольников для упаковки с опциональным принудительным поворотом больших деталей.
 
@@ -60,14 +72,14 @@ def prepare_rectangles_for_packing(material_details, kerf, force_rotate_large=Tr
     """
     rects_to_pack = []
     for idx, detail in material_details.iterrows():
-        width = detail['length_mm'] + kerf
-        height = detail['width_mm'] + kerf
+        width = detail["length_mm"] + kerf
+        height = detail["width_mm"] + kerf
 
         if width <= 0 or height <= 0:
             print(f"Пропуск {detail['part_id']}: {width}x{height}")
             continue
 
-        quantity = max(1, int(detail.get('quantity', 1)))
+        quantity = max(1, int(detail.get("quantity", 1)))
 
         # Если включен принудительный поворот и деталь "длинная"
         if force_rotate_large and width > height * 2:
@@ -81,7 +93,16 @@ def prepare_rectangles_for_packing(material_details, kerf, force_rotate_large=Tr
     return rects_to_pack
 
 
-def test_maxrects_blsf(details_df, materials_df, output_dir=".", pattern_dir="patterns", margin=DEFAULT_MARGIN, kerf=DEFAULT_KERF, sort_mode="big_first", force_rotate_large=True):
+def test_maxrects_blsf(
+    details_df,
+    materials_df,
+    output_dir=".",
+    pattern_dir="patterns",
+    margin=DEFAULT_MARGIN,
+    kerf=DEFAULT_KERF,
+    sort_mode="big_first",
+    force_rotate_large=True,
+):
     """
     Тестирование упаковки деталей с использованием только алгоритма MaxRectsBlsf.
     Игнорирует остатки и использует только целые листы материала.
@@ -100,38 +121,47 @@ def test_maxrects_blsf(details_df, materials_df, output_dir=".", pattern_dir="pa
         tuple: (словарь упаковщиков, количество использованных листов, количество карт раскроя)
     """
     print(
-        f"Запуск тестирования алгоритма MAXRECTS-BLSF (без остатков), режим сортировки: {sort_mode}")
+        f"Запуск тестирования алгоритма MAXRECTS-BLSF (без остатков), режим сортировки: {sort_mode}"
+    )
     logger.info(
-        f"Запуск тестирования алгоритма MAXRECTS-BLSF (без остатков), режим сортировки: {sort_mode}")
+        f"Запуск тестирования алгоритма MAXRECTS-BLSF (без остатков), режим сортировки: {sort_mode}"
+    )
 
     packers_by_material = {}
     total_used_sheets = 0
     layout_count = 0  # Подсчёт созданных карт раскроя
 
     # Получаем уникальные комбинации толщины и материала
-    unique_combinations = details_df[[
-        'thickness_mm', 'material']].drop_duplicates()
+    unique_combinations = details_df[
+        ["thickness_mm", "material"]
+    ].drop_duplicates()
     print(f"Найдено {len(unique_combinations)} комбинаций")
 
     for _, row in unique_combinations.iterrows():
-        thickness = row['thickness_mm']
-        material = row['material']
-        material_key = thickness if material == 'S' else f"{thickness}_{material}"
+        thickness = row["thickness_mm"]
+        material = row["material"]
+        material_key = (
+            thickness if material == "S" else f"{thickness}_{material}"
+        )
         print(
-            f"\nОбработка: толщина={thickness}, материал={material}, ключ={material_key}")
+            f"\nОбработка: толщина={thickness}, материал={material}, ключ={material_key}"
+        )
 
         # Фильтруем детали для текущей комбинации
-        detail_mask = (details_df['thickness_mm'] == thickness) & (
-            details_df['material'] == material)
+        detail_mask = (details_df["thickness_mm"] == thickness) & (
+            details_df["material"] == material
+        )
         material_details = details_df[detail_mask].copy()
         if material_details.empty:
             print("Нет деталей для данной комбинации")
             continue
 
         # Фильтруем материалы для текущей комбинации (только целые листы)
-        material_mask = ((materials_df['thickness_mm'] == thickness) &
-                         (materials_df['material'] == material) &
-                         (materials_df['is_remnant'] == False))
+        material_mask = (
+            (materials_df["thickness_mm"] == thickness)
+            & (materials_df["material"] == material)
+            & (materials_df["is_remnant"] == False)
+        )
         material_sheets = materials_df[material_mask].copy()
         if material_sheets.empty:
             print("Нет листов для данной комбинации")
@@ -140,7 +170,8 @@ def test_maxrects_blsf(details_df, materials_df, output_dir=".", pattern_dir="pa
         # Подготовка деталей для упаковки
         material_details = material_details.reset_index(drop=True)
         rects_to_pack = prepare_rectangles_for_packing(
-            material_details, kerf, force_rotate_large)
+            material_details, kerf, force_rotate_large
+        )
 
         if not rects_to_pack:
             print("Нет прямоугольников для упаковки")
@@ -151,9 +182,14 @@ def test_maxrects_blsf(details_df, materials_df, output_dir=".", pattern_dir="pa
             print(f" - {material_details.iloc[idx]['part_id']}: {w}x{h}")
 
         # Получаем размеры целых листов
-        full_sheets = [(row['sheet_length_mm'] - 2 * margin, row['sheet_width_mm'] - 2 * margin)
-                       for _, row in material_sheets.iterrows()
-                       for _ in range(int(row['total_quantity']))]
+        full_sheets = [
+            (
+                row["sheet_length_mm"] - 2 * margin,
+                row["sheet_width_mm"] - 2 * margin,
+            )
+            for _, row in material_sheets.iterrows()
+            for _ in range(int(row["total_quantity"]))
+        ]
 
         print(f"Целые листы: {len(full_sheets)}")
         for w, h in full_sheets:
@@ -218,35 +254,41 @@ def test_maxrects_blsf(details_df, materials_df, output_dir=".", pattern_dir="pa
                 for rect in bin:
                     idx = rect.rid
                     detail = material_details.iloc[idx]
-                    orig_width = detail['length_mm']
-                    orig_height = detail['width_mm']
+                    orig_width = detail["length_mm"]
+                    orig_height = detail["width_mm"]
                     rect_width = rect.width - kerf
                     rect_height = rect.height - kerf
-                    is_rotated = (abs(rect_width - orig_width) >
-                                  0.1) or (abs(rect_height - orig_height) > 0.1)
+                    is_rotated = (abs(rect_width - orig_width) > 0.1) or (
+                        abs(rect_height - orig_height) > 0.1
+                    )
                     detail_rect = {
-                        'x': rect.x + margin,
-                        'y': rect.y + margin,
-                        'width': rect_width,
-                        'height': rect_height,
-                        'rotated': is_rotated
+                        "x": rect.x + margin,
+                        "y": rect.y + margin,
+                        "width": rect_width,
+                        "height": rect_height,
+                        "rotated": is_rotated,
                     }
                     detail_info = add_detail_to_sheet(
-                        msp, detail, detail_rect, kerf)
+                        msp, detail, detail_rect, kerf
+                    )
                     if detail_info:
                         details_list.append(detail_info)
 
                 # Формируем имя файла
-                thickness_int = int(thickness) if float(
-                    thickness).is_integer() else thickness
-                if material != 'S':
+                thickness_int = (
+                    int(thickness)
+                    if float(thickness).is_integer()
+                    else thickness
+                )
+                if material != "S":
                     output_file = f"test_blsf_{thickness_int}mm_{material}_{sort_name}_{sheet_idx}.dxf"
                 else:
                     output_file = f"test_blsf_{thickness_int}mm_{sort_name}_{sheet_idx}.dxf"
 
                 # Добавляем заголовок и список деталей
                 add_layout_filename_title(
-                    msp, sheet_length, sheet_width, output_file)
+                    msp, sheet_length, sheet_width, output_file
+                )
                 add_details_list(msp, sheet_width, details_list)
 
                 # Сохраняем файл
@@ -261,13 +303,22 @@ def test_maxrects_blsf(details_df, materials_df, output_dir=".", pattern_dir="pa
                 logger.error(f"Ошибка DXF для листа {bin_idx}: {str(e)}")
 
     print(
-        f"\nУпаковка завершена. Всего листов: {total_used_sheets}, карт раскроя: {layout_count}")
+        f"\nУпаковка завершена. Всего листов: {total_used_sheets}, карт раскроя: {layout_count}"
+    )
     logger.info(f"Создано карт раскроя: {layout_count}")
 
     return packers_by_material, total_used_sheets, layout_count
 
 
-def test_various_algorithms(details_df, materials_df, output_dir=".", pattern_dir="patterns", margin=DEFAULT_MARGIN, kerf=DEFAULT_KERF, force_rotate_large=True):
+def test_various_algorithms(
+    details_df,
+    materials_df,
+    output_dir=".",
+    pattern_dir="patterns",
+    margin=DEFAULT_MARGIN,
+    kerf=DEFAULT_KERF,
+    force_rotate_large=True,
+):
     """
     Тестирование разных алгоритмов упаковки из библиотеки rectpack.
     Сравнивает все доступные алгоритмы из библиотеки rectpack:
@@ -292,27 +343,34 @@ def test_various_algorithms(details_df, materials_df, output_dir=".", pattern_di
     """
     print("Запуск сравнительного тестирования различных алгоритмов упаковки")
     logger.info(
-        "Запуск сравнительного тестирования различных алгоритмов упаковки")
+        "Запуск сравнительного тестирования различных алгоритмов упаковки"
+    )
     if force_rotate_large:
-        print("Включен режим принудительного поворота больших деталей (длина > 2000 мм)")
+        print(
+            "Включен режим принудительного поворота больших деталей (длина > 2000 мм)"
+        )
         logger.info(
-            "Включен режим принудительного поворота больших деталей (длина > 2000 мм)")
+            "Включен режим принудительного поворота больших деталей (длина > 2000 мм)"
+        )
 
     # Импортируем все доступные алгоритмы из rectpack
     from rectpack import (
-        MaxRectsBl, MaxRectsBlsf, MaxRectsBaf,
         GuillotineBssfSas,
-        SkylineBl, SkylineMwf
+        MaxRectsBaf,
+        MaxRectsBl,
+        MaxRectsBlsf,
+        SkylineBl,
+        SkylineMwf,
     )
 
     algorithms = {
-        "MaxRectsBl": MaxRectsBl,        # Bottom-Left
-        "MaxRectsBlsf": MaxRectsBlsf,    # Bottom-Left Score Fit
-        "MaxRectsBaf": MaxRectsBaf,      # Best Area Fit
+        "MaxRectsBl": MaxRectsBl,  # Bottom-Left
+        "MaxRectsBlsf": MaxRectsBlsf,  # Bottom-Left Score Fit
+        "MaxRectsBaf": MaxRectsBaf,  # Best Area Fit
         # Best Short Side Fit / Sort Area in Semi-Decreasing
         "GuillotineBssfSas": GuillotineBssfSas,
-        "SkylineBl": SkylineBl,          # Bottom-Left
-        "SkylineMwf": SkylineMwf         # Max Width Fit
+        "SkylineBl": SkylineBl,  # Bottom-Left
+        "SkylineMwf": SkylineMwf,  # Max Width Fit
     }
 
     results = {}
@@ -327,27 +385,34 @@ def test_various_algorithms(details_df, materials_df, output_dir=".", pattern_di
         layout_count = 0
 
         # Получаем уникальные комбинации толщины и материала
-        unique_combinations = details_df[[
-            'thickness_mm', 'material']].drop_duplicates()
+        unique_combinations = details_df[
+            ["thickness_mm", "material"]
+        ].drop_duplicates()
 
         for _, row in unique_combinations.iterrows():
-            thickness = row['thickness_mm']
-            material = row['material']
-            material_key = thickness if material == 'S' else f"{thickness}_{material}"
+            thickness = row["thickness_mm"]
+            material = row["material"]
+            material_key = (
+                thickness if material == "S" else f"{thickness}_{material}"
+            )
             print(
-                f"\nОбработка: толщина={thickness}, материал={material}, ключ={material_key}")
+                f"\nОбработка: толщина={thickness}, материал={material}, ключ={material_key}"
+            )
 
             # Фильтруем детали для текущей комбинации
-            detail_mask = (details_df['thickness_mm'] == thickness) & (
-                details_df['material'] == material)
+            detail_mask = (details_df["thickness_mm"] == thickness) & (
+                details_df["material"] == material
+            )
             material_details = details_df[detail_mask].copy()
             if material_details.empty:
                 continue
 
             # Фильтруем материалы для текущей комбинации (только целые листы)
-            material_mask = ((materials_df['thickness_mm'] == thickness) &
-                             (materials_df['material'] == material) &
-                             (materials_df['is_remnant'] == False))
+            material_mask = (
+                (materials_df["thickness_mm"] == thickness)
+                & (materials_df["material"] == material)
+                & (materials_df["is_remnant"] == False)
+            )
             material_sheets = materials_df[material_mask].copy()
             if material_sheets.empty:
                 continue
@@ -355,15 +420,21 @@ def test_various_algorithms(details_df, materials_df, output_dir=".", pattern_di
             # Подготовка деталей для упаковки с принудительным поворотом больших деталей
             material_details = material_details.reset_index(drop=True)
             rects_to_pack = prepare_rectangles_for_packing(
-                material_details, kerf, force_rotate_large)
+                material_details, kerf, force_rotate_large
+            )
 
             if not rects_to_pack:
                 continue
 
             # Получаем размеры целых листов
-            full_sheets = [(row['sheet_length_mm'] - 2 * margin, row['sheet_width_mm'] - 2 * margin)
-                           for _, row in material_sheets.iterrows()
-                           for _ in range(int(row['total_quantity']))]
+            full_sheets = [
+                (
+                    row["sheet_length_mm"] - 2 * margin,
+                    row["sheet_width_mm"] - 2 * margin,
+                )
+                for _, row in material_sheets.iterrows()
+                for _ in range(int(row["total_quantity"]))
+            ]
 
             if not full_sheets:
                 continue
@@ -391,7 +462,8 @@ def test_various_algorithms(details_df, materials_df, output_dir=".", pattern_di
             results[algo_name][material_key] = used_sheets
 
             print(
-                f"Результаты для {material_key}: использовано листов {used_sheets} из {len(full_sheets)}")
+                f"Результаты для {material_key}: использовано листов {used_sheets} из {len(full_sheets)}"
+            )
 
             # Генерация DXF файлов
             sheet_idx = 0
@@ -418,36 +490,42 @@ def test_various_algorithms(details_df, materials_df, output_dir=".", pattern_di
                     for rect in bin:
                         idx = rect.rid
                         detail = material_details.iloc[idx]
-                        orig_width = detail['length_mm']
-                        orig_height = detail['width_mm']
+                        orig_width = detail["length_mm"]
+                        orig_height = detail["width_mm"]
                         rect_width = rect.width - kerf
                         rect_height = rect.height - kerf
-                        is_rotated = (abs(rect_width - orig_width) >
-                                      0.1) or (abs(rect_height - orig_height) > 0.1)
+                        is_rotated = (abs(rect_width - orig_width) > 0.1) or (
+                            abs(rect_height - orig_height) > 0.1
+                        )
                         detail_rect = {
-                            'x': rect.x + margin,
-                            'y': rect.y + margin,
-                            'width': rect_width,
-                            'height': rect_height,
-                            'rotated': is_rotated
+                            "x": rect.x + margin,
+                            "y": rect.y + margin,
+                            "width": rect_width,
+                            "height": rect_height,
+                            "rotated": is_rotated,
                         }
                         detail_info = add_detail_to_sheet(
-                            msp, detail, detail_rect, kerf)
+                            msp, detail, detail_rect, kerf
+                        )
                         if detail_info:
                             details_list.append(detail_info)
 
                     # Формируем имя файла
-                    thickness_int = int(thickness) if float(
-                        thickness).is_integer() else thickness
+                    thickness_int = (
+                        int(thickness)
+                        if float(thickness).is_integer()
+                        else thickness
+                    )
                     rotate_suffix = "_rotated" if force_rotate_large else ""
-                    if material != 'S':
+                    if material != "S":
                         output_file = f"test_{algo_name}_{thickness_int}mm_{material}{rotate_suffix}_{sheet_idx}.dxf"
                     else:
                         output_file = f"test_{algo_name}_{thickness_int}mm{rotate_suffix}_{sheet_idx}.dxf"
 
                     # Добавляем заголовок и список деталей
                     add_layout_filename_title(
-                        msp, sheet_length, sheet_width, output_file)
+                        msp, sheet_length, sheet_width, output_file
+                    )
                     add_details_list(msp, sheet_width, details_list)
 
                     # Сохраняем файл
@@ -461,13 +539,14 @@ def test_various_algorithms(details_df, materials_df, output_dir=".", pattern_di
                     print(f"Ошибка DXF для листа {bin_idx}: {str(e)}")
                     logger.error(f"Ошибка DXF для листа {bin_idx}: {str(e)}")
 
-        results[algo_name]['total_sheets'] = total_used_sheets
-        results[algo_name]['layout_count'] = layout_count
+        results[algo_name]["total_sheets"] = total_used_sheets
+        results[algo_name]["layout_count"] = layout_count
         print(f"\n=== Результаты для алгоритма {algo_name} ===")
         print(f"Всего использовано листов: {total_used_sheets}")
         print(f"Создано карт раскроя: {layout_count}")
         logger.info(
-            f"Алгоритм {algo_name}: листов {total_used_sheets}, карт {layout_count}")
+            f"Алгоритм {algo_name}: листов {total_used_sheets}, карт {layout_count}"
+        )
 
     # Сравнительная таблица результатов
     print("\n=== Сравнение алгоритмов ===")
@@ -475,6 +554,7 @@ def test_various_algorithms(details_df, materials_df, output_dir=".", pattern_di
     print("|----------|--------|-------------|")
     for algo_name, result in results.items():
         print(
-            f"| {algo_name} | {result['total_sheets']} | {result['layout_count']} |")
+            f"| {algo_name} | {result['total_sheets']} | {result['layout_count']} |"
+        )
 
     return results

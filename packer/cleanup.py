@@ -1,6 +1,7 @@
-import os
 import glob
-from .config import logger, LOG_FILE
+import os
+
+from .config import LOG_FILE, logger
 
 
 class CleanupManager:
@@ -15,8 +16,8 @@ class CleanupManager:
         try:
             logger.info("Очистка логов...")
             if os.path.exists(LOG_FILE):
-                with open(LOG_FILE, 'w', encoding='utf-8') as f:
-                    f.write('')
+                with open(LOG_FILE, "w", encoding="utf-8") as f:
+                    f.write("")
                 logger.info(f"Лог-файл {LOG_FILE} очищен")
         except Exception as e:
             logger.error(f"Ошибка при очистке логов: {str(e)}")
@@ -32,7 +33,8 @@ class CleanupManager:
                         logger.info(f"Удален файл: {file_path}")
                     except Exception as e:
                         logger.warning(
-                            f"Не удалось удалить файл {file_path}: {str(e)}")
+                            f"Не удалось удалить файл {file_path}: {str(e)}"
+                        )
         except Exception as e:
             logger.error(f"Ошибка при очистке временных файлов: {str(e)}")
 
@@ -47,7 +49,8 @@ class CleanupManager:
                         logger.info(f"Удален файл: {file_path}")
                     except Exception as e:
                         logger.warning(
-                            f"Не удалось удалить файл {file_path}: {str(e)}")
+                            f"Не удалось удалить файл {file_path}: {str(e)}"
+                        )
         except Exception as e:
             logger.error(f"Ошибка при очистке выходных файлов: {str(e)}")
 

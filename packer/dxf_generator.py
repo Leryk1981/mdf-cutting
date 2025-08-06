@@ -1,7 +1,9 @@
+import os.path
+import re
+
 import ezdxf
 from ezdxf.filemanagement import new
-import re
-import os.path
+
 from .config import logger
 
 
@@ -10,7 +12,7 @@ def normalize_layer_name(name):
     Очищает имя слоя от недопустимых символов, сохраняя максимум исходных символов.
 
     В DXF имена слоев не могут содержать некоторые специальные символы.
-    Эта функция заменяет только безусловно недопустимые символы, стараясь 
+    Эта функция заменяет только безусловно недопустимые символы, стараясь
     максимально сохранить исходное имя.
 
     Args:
@@ -27,11 +29,11 @@ def normalize_layer_name(name):
     safe_name = ""
     for char in name:
         # Разрешаем буквы, цифры, подчеркивания, дефисы, точки, доллары
-        if char.isalnum() or char in '_-.$ ':
+        if char.isalnum() or char in "_-.$ ":
             safe_name += char
         else:
             # Для других символов используем подчеркивание
-            safe_name += '_'
+            safe_name += "_"
 
     # Проверяем, что имя не пустое после очистки
     if not safe_name or safe_name.isspace():
@@ -43,12 +45,24 @@ def normalize_layer_name(name):
     # Логируем информацию, если имя было изменено
     if safe_name != name:
         from .config import logger
+
         logger.info(f"Имя слоя нормализовано: '{name}' -> '{safe_name}'")
 
     return safe_name
 
 
-def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, bevel_offset=None, is_rotated=False):
+def add_bevel_lines(
+    msp,
+    x,
+    y,
+    length,
+    width,
+    bevel_type,
+    f_long=0,
+    f_short=0,
+    bevel_offset=None,
+    is_rotated=False,
+):
     """
     Добавляет линии фасок на деталь с расширенной логикой удлинения линий для создания замкнутых контуров.
 
@@ -63,16 +77,17 @@ def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, b
         f_long: значения фасок по длине (длинная сторона) (0 - нет, 1 - с одной стороны, 2 - с обеих)
         f_short: значения фасок по ширине (короткая сторона) (0 - нет, 1 - с одной стороны, 2 - с обеих)
         bevel_offset: смещение фаски (мм), положительное - наружу, отрицательное - внутрь
-        is_rotated: флаг, указывающий, повернута ли деталь на 90 градусов 
+        is_rotated: флаг, указывающий, повернута ли деталь на 90 градусов
     """
-    if not bevel_type or bevel_type.lower() in ['нет', 'none', 'no']:
+    if not bevel_type or bevel_type.lower() in ["нет", "none", "no"]:
         return
 
     # Определяем смещение фаски
     if bevel_offset is None:
         offset = 0
         logger.warning(
-            f"Смещение фаски не указано для {bevel_type}, используется {offset}")
+            f"Смещение фаски не указано для {bevel_type}, используется {offset}"
+        )
     else:
         offset = bevel_offset
         logger.info(f"Используется смещение фаски из таблицы: {offset}")
@@ -81,14 +96,14 @@ def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, b
     original_layer_name = bevel_type
 
     # Создаем безопасное имя слоя, которое будет работать в DXF
-    safe_layer_name = ''
+    safe_layer_name = ""
     for char in original_layer_name:
         if ord(char) == 0xFFFD:
-            safe_layer_name += '_'
-        elif char.isalnum() or char.isalpha() or char in '_-./$':
+            safe_layer_name += "_"
+        elif char.isalnum() or char.isalpha() or char in "_-./$":
             safe_layer_name += char
         else:
-            safe_layer_name += '_'
+            safe_layer_name += "_"
 
     if not safe_layer_name or safe_layer_name.isspace():
         safe_layer_name = "BEVEL_TYPE"
@@ -104,23 +119,27 @@ def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, b
     except Exception as e:
         logger.error(f"Не удалось создать слой фаски '{layer_name}': {str(e)}")
         try:
-            translit_layer_name = "BEVEL_" + \
-                ''.join([c if ord(c) < 128 else '_' for c in original_layer_name])
+            translit_layer_name = "BEVEL_" + "".join(
+                [c if ord(c) < 128 else "_" for c in original_layer_name]
+            )
             if translit_layer_name not in existing_layers:
-                msp.doc.layers.new(translit_layer_name,
-                                   dxfattribs={"color": 1})
+                msp.doc.layers.new(
+                    translit_layer_name, dxfattribs={"color": 1}
+                )
             layer_name = translit_layer_name
             logger.info(f"Создан транслитерированный слой фаски: {layer_name}")
         except Exception as e2:
             logger.error(
-                f"Не удалось создать транслитерированный слой: {str(e2)}")
+                f"Не удалось создать транслитерированный слой: {str(e2)}"
+            )
             try:
                 fallback_layer = "BEVEL"
                 if fallback_layer not in existing_layers:
                     msp.doc.layers.new(fallback_layer, dxfattribs={"color": 1})
                 layer_name = fallback_layer
                 logger.info(
-                    f"Используем запасной слой для фаски: {layer_name}")
+                    f"Используем запасной слой для фаски: {layer_name}"
+                )
             except Exception as e3:
                 logger.error(f"Не удалось создать запасной слой: {str(e3)}")
                 layer_name = "0"
@@ -208,16 +227,20 @@ def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, b
         if f_long == 2 and f_short == 2 and offset > 0:
             # Создаем замкнутую полилинию для фаски по всему периметру
             points = [
-                (x - offset, y - offset),                   # Левый нижний угол
-                (x + length + offset, y - offset),          # Правый нижний угол
-                (x + length + offset, y + width + offset),  # Правый верхний угол
-                (x - offset, y + width + offset),           # Левый верхний угол
-                (x - offset, y - offset)                    # Замыкаем контур
+                (x - offset, y - offset),  # Левый нижний угол
+                (x + length + offset, y - offset),  # Правый нижний угол
+                (
+                    x + length + offset,
+                    y + width + offset,
+                ),  # Правый верхний угол
+                (x - offset, y + width + offset),  # Левый верхний угол
+                (x - offset, y - offset),  # Замыкаем контур
             ]
 
             msp.add_lwpolyline(points, dxfattribs=layer_attributes)
             logger.info(
-                f"Добавлена замкнутая полилиния фаски по всему периметру")
+                f"Добавлена замкнутая полилиния фаски по всему периметру"
+            )
             return  # Выходим из функции, так как фаска уже нарисована
 
         if is_rotated:
@@ -228,14 +251,14 @@ def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, b
                 msp.add_line(
                     (x - offset, y - left_extend_bottom),
                     (x - offset, y + width + left_extend_top),
-                    dxfattribs=layer_attributes
+                    dxfattribs=layer_attributes,
                 )
                 if f_long >= 2:
                     # Правая вертикальная линия (смещение по X вправо)
                     msp.add_line(
                         (x + length + offset, y - right_extend_bottom),
                         (x + length + offset, y + width + right_extend_top),
-                        dxfattribs=layer_attributes
+                        dxfattribs=layer_attributes,
                     )
 
             # Фаски по ширине (f_short) — на горизонтальных сторонах
@@ -244,14 +267,14 @@ def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, b
                 msp.add_line(
                     (x - bottom_extend_left, y - offset),
                     (x + length + bottom_extend_right, y - offset),
-                    dxfattribs=layer_attributes
+                    dxfattribs=layer_attributes,
                 )
                 if f_short >= 2:
                     # Верхняя горизонтальная линия (смещение по Y вверх)
                     msp.add_line(
                         (x - top_extend_left, y + width + offset),
                         (x + length + top_extend_right, y + width + offset),
-                        dxfattribs=layer_attributes
+                        dxfattribs=layer_attributes,
                     )
         else:
             # Без поворота: длина — горизонтальная, ширина — вертикальная
@@ -261,14 +284,14 @@ def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, b
                 msp.add_line(
                     (x - bottom_extend_left, y - offset),
                     (x + length + bottom_extend_right, y - offset),
-                    dxfattribs=layer_attributes
+                    dxfattribs=layer_attributes,
                 )
                 if f_long >= 2:
                     # Верхняя горизонтальная линия (смещение по Y вверх)
                     msp.add_line(
                         (x - top_extend_left, y + width + offset),
                         (x + length + top_extend_right, y + width + offset),
-                        dxfattribs=layer_attributes
+                        dxfattribs=layer_attributes,
                     )
 
             # Фаски по ширине (f_short) — на вертикальных сторонах
@@ -277,14 +300,14 @@ def add_bevel_lines(msp, x, y, length, width, bevel_type, f_long=0, f_short=0, b
                 msp.add_line(
                     (x - offset, y - left_extend_bottom),
                     (x - offset, y + width + left_extend_top),
-                    dxfattribs=layer_attributes
+                    dxfattribs=layer_attributes,
                 )
                 if f_short >= 2:
                     # Правая вертикальная линия (смещение по X вправо)
                     msp.add_line(
                         (x + length + offset, y - right_extend_bottom),
                         (x + length + offset, y + width + right_extend_top),
-                        dxfattribs=layer_attributes
+                        dxfattribs=layer_attributes,
                     )
 
     except Exception as e:
@@ -298,7 +321,7 @@ def add_layout_filename_title(msp, sheet_length, sheet_width, filename):
     Args:
         msp: modelspace DXF документа
         sheet_length: длина листа (мм)
-        sheet_width: ширина листа (мм) 
+        sheet_width: ширина листа (мм)
         filename: имя файла раскроя
     """
     try:
@@ -312,7 +335,7 @@ def add_layout_filename_title(msp, sheet_length, sheet_width, filename):
         # Попробуем сначала mtext, так как он лучше поддерживает выравнивание
         try:
             text_entity = msp.add_mtext(base_filename)
-            text_entity.dxf.layer = 'TITLE'
+            text_entity.dxf.layer = "TITLE"
             text_entity.dxf.color = 2  # Желтый
             text_entity.dxf.char_height = 70  # Высота текста
 
@@ -324,16 +347,18 @@ def add_layout_filename_title(msp, sheet_length, sheet_width, filename):
             text_entity.dxf.attachment_point = 6  # 6 = нижний правый угол
 
             logger.info(
-                f"Добавлен заголовок (mtext) с именем файла: {base_filename}")
+                f"Добавлен заголовок (mtext) с именем файла: {base_filename}"
+            )
 
         except Exception as e:
             # Если mtext не поддерживается, используем обычный текст
             logger.warning(
-                f"Не удалось добавить mtext, используем обычный текст: {str(e)}")
+                f"Не удалось добавить mtext, используем обычный текст: {str(e)}"
+            )
 
             # Добавляем обычный текст с указанием точки привязки
             text_entity = msp.add_text(base_filename)
-            text_entity.dxf.layer = 'TITLE'
+            text_entity.dxf.layer = "TITLE"
             text_entity.dxf.color = 2  # Желтый
             text_entity.dxf.height = 70
 
@@ -349,22 +374,25 @@ def add_layout_filename_title(msp, sheet_length, sheet_width, filename):
                 # Если не поддерживается, используем метод set_pos
                 try:
                     text_entity.set_pos(
-                        (sheet_length, sheet_width),
-                        align='TOP_RIGHT'
+                        (sheet_length, sheet_width), align="TOP_RIGHT"
                     )
                 except:
                     # Если и это не работает, делаем приближение вручную
                     # Оценим длину текста (примерно 40 пикселей на символ при высоте 60)
                     text_width = len(base_filename) * 40
                     text_entity.dxf.insert = (
-                        sheet_length - text_width, sheet_width)
+                        sheet_length - text_width,
+                        sheet_width,
+                    )
 
             logger.info(
-                f"Добавлен заголовок (text) с именем файла: {base_filename}")
+                f"Добавлен заголовок (text) с именем файла: {base_filename}"
+            )
 
     except Exception as e:
         logger.error(f"Ошибка при добавлении заголовка: {str(e)}")
         import traceback
+
         logger.error(traceback.format_exc())
 
 
@@ -391,14 +419,16 @@ def add_details_list(msp, sheet_width, details_list, filename=None):
 
             # Создаем текст для имени файла
             file_text = msp.add_text(base_filename)
-            file_text.dxf.layer = 'PARTSLIST'
+            file_text.dxf.layer = "PARTSLIST"
             file_text.dxf.color = 2  # Желтый
             file_text.dxf.height = 40  # Высота текста
 
             # Устанавливаем положение с учетом высоты строки
             file_text.dxf.insert = (0, -line_height * (line_index + 1))
 
-            line_index += 2  # Оставляем дополнительное пространство после имени файла
+            line_index += (
+                2  # Оставляем дополнительное пространство после имени файла
+            )
 
             logger.info(f"Добавлено имя файла в список: {base_filename}")
 
@@ -406,7 +436,8 @@ def add_details_list(msp, sheet_width, details_list, filename=None):
         if details_list:
             # Сортировка по возрастанию part_id (преобразуем в int для правильного порядка)
             sorted_details = sorted(
-                details_list, key=lambda x: int(x[0]) if x and x[0] else 0)
+                details_list, key=lambda x: int(x[0]) if x and x[0] else 0
+            )
 
             # Добавляем каждую деталь отдельной строкой
             for i, detail_info in enumerate(sorted_details):
@@ -419,19 +450,22 @@ def add_details_list(msp, sheet_width, details_list, filename=None):
 
                 # Создаем текст
                 text_entity = msp.add_text(text)
-                text_entity.dxf.layer = 'PARTSLIST'
+                text_entity.dxf.layer = "PARTSLIST"
                 text_entity.dxf.color = 3  # Зеленый
                 text_entity.dxf.height = 40
 
                 # Устанавливаем положение с учетом высоты строки
                 text_entity.dxf.insert = (
-                    0, -line_height * (line_index + i + 1))
+                    0,
+                    -line_height * (line_index + i + 1),
+                )
 
                 logger.info(f"Добавлена запись в список деталей: {text}")
 
     except Exception as e:
         logger.error(f"Ошибка при добавлении списка деталей: {str(e)}")
         import traceback
+
         logger.error(traceback.format_exc())
 
 
@@ -458,15 +492,17 @@ def create_new_dxf():
 
     # Текстовые стили
     try:
-        doc.styles.new('normal_text', dxfattribs={'height': 40})
-        doc.styles.new('large_text', dxfattribs={'height': 60})
+        doc.styles.new("normal_text", dxfattribs={"height": 40})
+        doc.styles.new("large_text", dxfattribs={"height": 60})
     except Exception as e:
         logger.warning(f"Не удалось создать текстовый стиль: {str(e)}")
 
     return doc, msp
 
 
-def add_detail_dimensions(msp, x, y, width, height, part_id, order_id, thickness):
+def add_detail_dimensions(
+    msp, x, y, width, height, part_id, order_id, thickness
+):
     """
     Добавляет размеры и метки на чертеж внутри детали в нижнем левом углу.
     Текст расположен вдоль длинной стороны и поворачивается вместе с деталью.
@@ -496,7 +532,7 @@ def add_detail_dimensions(msp, x, y, width, height, part_id, order_id, thickness
     try:
         # Создаем текст с соответствующими атрибутами
         text_entity = msp.add_text(text)
-        text_entity.dxf.layer = 'TEXT'
+        text_entity.dxf.layer = "TEXT"
         text_entity.dxf.color = 3  # Зеленый (был 1 - Красный)
         text_entity.dxf.height = 40
 
@@ -524,22 +560,28 @@ def add_sheet_outline(msp, sheet_length, sheet_width, margin):
     """
     try:
         # Полный контур листа
-        msp.add_lwpolyline([
-            (0, 0),
-            (sheet_length, 0),
-            (sheet_length, sheet_width),
-            (0, sheet_width),
-            (0, 0)
-        ], dxfattribs={'layer': '0'})
+        msp.add_lwpolyline(
+            [
+                (0, 0),
+                (sheet_length, 0),
+                (sheet_length, sheet_width),
+                (0, sheet_width),
+                (0, 0),
+            ],
+            dxfattribs={"layer": "0"},
+        )
 
         # Граница рабочей области (с отступом margin от края)
-        msp.add_lwpolyline([
-            (margin, margin),
-            (sheet_length - margin, margin),
-            (sheet_length - margin, sheet_width - margin),
-            (margin, sheet_width - margin),
-            (margin, margin)
-        ], dxfattribs={'layer': 'work_area'})
+        msp.add_lwpolyline(
+            [
+                (margin, margin),
+                (sheet_length - margin, margin),
+                (sheet_length - margin, sheet_width - margin),
+                (margin, sheet_width - margin),
+                (margin, margin),
+            ],
+            dxfattribs={"layer": "work_area"},
+        )
     except Exception as e:
         logger.error(f"Ошибка при добавлении контуров: {str(e)}")
 
@@ -556,13 +598,16 @@ def add_cut_line(msp, x, y, width, height, offset):
     """
     try:
         # Добавляем контур реза со смещением
-        msp.add_lwpolyline([
-            (x - offset, y - offset),
-            (x + width + offset, y - offset),
-            (x + width + offset, y + height + offset),
-            (x - offset, y + height + offset),
-            (x - offset, y - offset)
-        ], dxfattribs={'layer': 'cut', 'color': 3})
+        msp.add_lwpolyline(
+            [
+                (x - offset, y - offset),
+                (x + width + offset, y - offset),
+                (x + width + offset, y + height + offset),
+                (x - offset, y + height + offset),
+                (x - offset, y - offset),
+            ],
+            dxfattribs={"layer": "cut", "color": 3},
+        )
     except Exception as e:
         logger.error(f"Ошибка при добавлении линии реза: {str(e)}")
 
@@ -582,21 +627,23 @@ def add_detail_to_sheet(msp, detail, rect_info, kerf):
     """
     try:
         logger.info(f"Добавление детали: {detail['part_id']}")
-        part_id = str(detail['part_id'])
+        part_id = str(detail["part_id"])
 
         # Оригинальные размеры детали из таблицы
-        orig_length = detail['length_mm']  # Длина (всегда большая сторона)
-        orig_width = detail['width_mm']    # Ширина (всегда меньшая сторона)
+        orig_length = detail["length_mm"]  # Длина (всегда большая сторона)
+        orig_width = detail["width_mm"]  # Ширина (всегда меньшая сторона)
 
         # Координаты левого нижнего угла детали
-        detail_x = rect_info['x']
-        detail_y = rect_info['y']
+        detail_x = rect_info["x"]
+        detail_y = rect_info["y"]
 
         # Проверяем, есть ли прямое указание о повороте детали
-        is_rotated = rect_info.get('rotated', False)
+        is_rotated = rect_info.get("rotated", False)
 
-        logger.info(f"Деталь {part_id}: is_rotated={is_rotated}, " +
-                    f"оригинальные размеры: {orig_length}x{orig_width}")
+        logger.info(
+            f"Деталь {part_id}: is_rotated={is_rotated}, "
+            + f"оригинальные размеры: {orig_length}x{orig_width}"
+        )
 
         # Размеры детали для отрисовки
         if is_rotated:
@@ -604,67 +651,109 @@ def add_detail_to_sheet(msp, detail, rect_info, kerf):
             detail_width = orig_width
             detail_height = orig_length
             logger.info(
-                f"Деталь {part_id} повернута, отрисовка с размерами: {detail_width}x{detail_height}")
+                f"Деталь {part_id} повернута, отрисовка с размерами: {detail_width}x{detail_height}"
+            )
         else:
             # Деталь не повернута - используем оригинальные размеры
             detail_width = orig_length
             detail_height = orig_width
             logger.info(
-                f"Деталь {part_id} не повернута, отрисовка с размерами: {detail_width}x{detail_height}")
+                f"Деталь {part_id} не повернута, отрисовка с размерами: {detail_width}x{detail_height}"
+            )
 
         # Добавляем контур детали
-        msp.add_lwpolyline([
-            (detail_x, detail_y),
-            (detail_x + detail_width, detail_y),
-            (detail_x + detail_width, detail_y + detail_height),
-            (detail_x, detail_y + detail_height),
-            (detail_x, detail_y)
-        ], dxfattribs={'layer': 'details'})
+        msp.add_lwpolyline(
+            [
+                (detail_x, detail_y),
+                (detail_x + detail_width, detail_y),
+                (detail_x + detail_width, detail_y + detail_height),
+                (detail_x, detail_y + detail_height),
+                (detail_x, detail_y),
+            ],
+            dxfattribs={"layer": "details"},
+        )
 
         # Добавляем линию реза со смещением 2мм (половина kerf)
-        add_cut_line(msp, detail_x, detail_y,
-                     detail_width, detail_height, kerf/2)
+        add_cut_line(
+            msp, detail_x, detail_y, detail_width, detail_height, kerf / 2
+        )
 
         # Добавляем фаски, если нужно
         # Гарантируем, что тип фаски - строка
-        bevel_type = str(detail.get('bevel_type', '')) if detail.get(
-            'bevel_type') is not None else ''
+        bevel_type = (
+            str(detail.get("bevel_type", ""))
+            if detail.get("bevel_type") is not None
+            else ""
+        )
 
         # Получаем смещение фаски из таблицы, если оно указано
         bevel_offset = None
-        if 'bevel_offset_mm' in detail and detail['bevel_offset_mm'] is not None:
+        if (
+            "bevel_offset_mm" in detail
+            and detail["bevel_offset_mm"] is not None
+        ):
             try:
-                bevel_offset = float(detail['bevel_offset_mm'])
+                bevel_offset = float(detail["bevel_offset_mm"])
                 logger.info(
-                    f"Используется смещение фаски из таблицы: {bevel_offset}")
+                    f"Используется смещение фаски из таблицы: {bevel_offset}"
+                )
             except (ValueError, TypeError):
                 logger.warning(
-                    f"Некорректное значение смещения фаски: {detail['bevel_offset_mm']}")
+                    f"Некорректное значение смещения фаски: {detail['bevel_offset_mm']}"
+                )
 
         # Получаем значения фасок по длине и ширине
-        f_long = int(detail.get('f_long', 0)) if detail.get(
-            'f_long') is not None else 0
-        f_short = int(detail.get('f_short', 0)) if detail.get(
-            'f_short') is not None else 0
+        f_long = (
+            int(detail.get("f_long", 0))
+            if detail.get("f_long") is not None
+            else 0
+        )
+        f_short = (
+            int(detail.get("f_short", 0))
+            if detail.get("f_short") is not None
+            else 0
+        )
 
-        if bevel_type and bevel_type.lower() not in ['нет', 'none', 'no']:
+        if bevel_type and bevel_type.lower() not in ["нет", "none", "no"]:
             # Добавляем фаски с учетом поворота детали
-            add_bevel_lines(msp, detail_x, detail_y, detail_width, detail_height,
-                            bevel_type, f_long, f_short, bevel_offset, is_rotated)
+            add_bevel_lines(
+                msp,
+                detail_x,
+                detail_y,
+                detail_width,
+                detail_height,
+                bevel_type,
+                f_long,
+                f_short,
+                bevel_offset,
+                is_rotated,
+            )
 
         # Добавляем размеры и метки
         logger.info(
-            f"Добавление текста для детали {part_id}, координаты: {detail_x}, {detail_y}")
-        order_id = detail.get('order_id', None)
-        thickness = detail.get('thickness_mm', None)
-        material = detail.get('material', 'S')
+            f"Добавление текста для детали {part_id}, координаты: {detail_x}, {detail_y}"
+        )
+        order_id = detail.get("order_id", None)
+        thickness = detail.get("thickness_mm", None)
+        material = detail.get("material", "S")
 
         # Форматируем толщину с материалом для отображения
-        thickness_display = f"{thickness}{material}" if material and material != 'S' else str(
-            thickness)
+        thickness_display = (
+            f"{thickness}{material}"
+            if material and material != "S"
+            else str(thickness)
+        )
 
-        add_detail_dimensions(msp, detail_x, detail_y, detail_width, detail_height,
-                              part_id, order_id, thickness_display)
+        add_detail_dimensions(
+            msp,
+            detail_x,
+            detail_y,
+            detail_width,
+            detail_height,
+            part_id,
+            order_id,
+            thickness_display,
+        )
 
         # Возвращаем информацию о детали для последующего использования в списке деталей
         size_str = f"{orig_length}x{orig_width}"
@@ -672,8 +761,10 @@ def add_detail_to_sheet(msp, detail, rect_info, kerf):
 
     except Exception as e:
         logger.error(
-            f"Ошибка при добавлении детали {detail.get('part_id', 'unknown')}: {str(e)}")
+            f"Ошибка при добавлении детали {detail.get('part_id', 'unknown')}: {str(e)}"
+        )
         import traceback
+
         logger.error(traceback.format_exc())
         return None
 
@@ -690,5 +781,6 @@ def load_patterns(pattern_dir):
         dict: пустой словарь
     """
     logger.info(
-        f"Папка с узорами: {pattern_dir} (функциональность узоров отключена)")
+        f"Папка с узорами: {pattern_dir} (функциональность узоров отключена)"
+    )
     return {}

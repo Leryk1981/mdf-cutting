@@ -1,4 +1,5 @@
 import os
+
 from .config import logger
 
 
@@ -40,7 +41,8 @@ def load_patterns(pattern_dir):
         dict: {} - пустой словарь
     """
     logger.info(
-        f"Папка с узорами: {pattern_dir} (функциональность загрузки узоров отключена)")
+        f"Папка с узорами: {pattern_dir} (функциональность загрузки узоров отключена)"
+    )
 
     # Создаем директорию, если она не существует
     if not os.path.exists(pattern_dir):
