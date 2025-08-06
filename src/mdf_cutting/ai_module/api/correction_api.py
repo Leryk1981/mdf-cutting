@@ -16,8 +16,10 @@ from datetime import datetime
 import logging
 
 from ..core.models import EnsembleCorrectionModel, HybridCorrectionModel
+from ..core.leftover_optimizer import LeftoverOptimizer, LeftoverOptimizationModel
 from ..features.geometry import GeometryFeatureExtractor
 from ..features.optimization import OptimizationFeatureExtractor
+from ..features.leftovers import Leftover, LeftoverFeatureExtractor
 from ..utils.data_loader import MLDataLoader
 from ..utils.metrics import CorrectionMetrics
 from src.mdf_cutting.config.loader import ConfigLoader
@@ -35,8 +37,15 @@ class CorrectionAPI:
         # Инициализация компонентов
         self.geometry_extractor = GeometryFeatureExtractor()
         self.optimization_extractor = OptimizationFeatureExtractor()
+        self.leftover_extractor = LeftoverFeatureExtractor()
         self.data_loader = MLDataLoader(self.config_loader)
         self.metrics = CorrectionMetrics()
+        
+        # Инициализация оптимизатора остатков
+        self.leftover_optimizer = None
+        
+        # База данных остатков (в реальности это будет БД)
+        self.leftovers_db = self._load_leftovers_db()
         
         # Загрузка модели
         self.model_path = model_path or Path("models/trained/best_model.pth")
@@ -346,4 +355,163 @@ class CorrectionAPI:
     def _store_negative_experience(self, corrections: List[Dict]):
         """Сохранение отрицательного опыта для RL"""
         # Реализация зависит от конкретной архитектуры RL
-        pass 
+        pass
+    
+    def optimize_with_leftovers(self, dxf_path: Path, order_data: Dict[str, Any], 
+                              force_new_sheets: bool = False) -> Dict[str, Any]:
+        """Оптимизация раскроя с учетом остатков."""
+        try:
+            start_time = datetime.now()
+            
+            # 1. Загрузка и базовый анализ
+            dxf_data = self.data_loader.load_dxf(dxf_path)
+            geometry_features = self.geometry_extractor.extract_features(dxf_data)
+            
+            # 2. Анализ остатков
+            leftover_features = self.leftover_extractor.extract_leftover_features(
+                dxf_data, self.leftovers_db
+            )
+            
+            # 3. Определение стратегии
+            strategy = leftover_features["optimization_strategy"]
+            
+            # Если принудительно требуются новые листы или нет подходящих остатков
+            if (force_new_sheets or 
+                len(leftover_features["material_efficiency"]["suitable_leftovers"]) == 0):
+                # Используем базовый AI без остатков
+                result = self.get_corrections(dxf_path, order_data)
+                result["optimization_strategy"] = "new_sheets_only"
+                return result
+            
+            # 4. Инициализация оптимизатора остатков
+            if self.leftover_optimizer is None:
+                self.leftover_optimizer = self._init_leftover_optimizer()
+            
+            # 5. Оптимизация с остатками
+            optimization_result = self.leftover_optimizer.optimize_layout(
+                dxf_data, self.leftovers_db
+            )
+            
+            # 6. Формирование итогового результата
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            result = {
+                "status": "success",
+                "optimization_strategy": "with_leftovers",
+                "assignments": optimization_result["assignments"],
+                "optimized_layout": optimization_result["optimized_layout"],
+                "new_leftovers": optimization_result["new_leftovers"],
+                "efficiency_metrics": optimization_result["efficiency_metrics"],
+                "material_analysis": leftover_features["material_efficiency"],
+                "suitable_leftovers": leftover_features["leftover_suitability"],
+                "processing_time_ms": int(processing_time * 1000),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.logger.info(f"Optimized with leftovers in {processing_time:.2f}s")
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error in leftover optimization: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "optimization_strategy": "with_leftovers"
+            }
+    
+    def update_leftovers_db(self, new_leftovers: List[Dict[str, Any]]):
+        """Обновление базы данных остатками после раскроя."""
+        try:
+            for leftover_data in new_leftovers:
+                # Преобразование в объект Leftover
+                leftover = Leftover(
+                    id=f"leftover_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(self.leftovers_db)}",
+                    geometry=leftover_data.get("geometry"),
+                    material_code=leftover_data.get("material_code", "MDF"),
+                    thickness=leftover_data.get("thickness", 16.0),
+                    creation_date=datetime.now().isoformat(),
+                    source_dxf=leftover_data.get("source_dxf", ""),
+                    usage_count=0,
+                    priority=leftover_data.get("priority", 1.0),
+                    area=leftover_data.get("area_remaining", 0.0),
+                    width=leftover_data.get("width", 0.0),
+                    height=leftover_data.get("height", 0.0)
+                )
+                
+                # Добавление в базу
+                self.leftovers_db.append(leftover)
+            
+            self.logger.info(f"Added {len(new_leftovers)} new leftovers to database")
+            
+        except Exception as e:
+            self.logger.error(f"Error updating leftovers database: {e}")
+    
+    def get_leftovers_usage_stats(self) -> Dict[str, Any]:
+        """Статистика использования остатков."""
+        try:
+            if not self.leftovers_db:
+                return {"message": "No leftovers in database"}
+            
+            total_leftovers = len(self.leftovers_db)
+            used_leftovers = sum(1 for l in self.leftovers_db if l.usage_count > 0)
+            avg_usage = np.mean([l.usage_count for l in self.leftovers_db])
+            
+            # Статистика по размерам
+            areas = [l.area for l in self.leftovers_db]
+            avg_area = np.mean(areas)
+            total_area = sum(areas)
+            
+            return {
+                "total_leftovers": total_leftovers,
+                "used_leftovers": used_leftovers,
+                "unused_leftovers": total_leftovers - used_leftovers,
+                "usage_rate": used_leftovers / total_leftovers if total_leftovers > 0 else 0,
+                "average_usage_count": avg_usage,
+                "average_area": avg_area,
+                "total_area": total_area,
+                "material_distribution": self._get_material_distribution()
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting leftovers stats: {e}")
+            return {"error": str(e)}
+    
+    def _load_leftovers_db(self) -> List[Leftover]:
+        """Загрузка базы данных остатков."""
+        # В реальности это будет загрузка из БД
+        # Для примера - пустая база
+        return []
+    
+    def _init_leftover_optimizer(self) -> LeftoverOptimizer:
+        """Инициализация оптимизатора остатков."""
+        try:
+            # Загрузка предобученной модели
+            model_path = Path("models/trained/leftover_optimizer.pth")
+            feature_dim = 256
+            
+            model = LeftoverOptimizationModel(feature_dim=feature_dim)
+            
+            if model_path.exists():
+                checkpoint = torch.load(model_path, map_location='cpu')
+                model.load_state_dict(checkpoint["model_state_dict"])
+                self.logger.info("Loaded trained leftover optimizer")
+            else:
+                self.logger.warning("Could not load trained leftover optimizer, using untrained model")
+            
+            config = {"device": str(self.device)}
+            
+            return LeftoverOptimizer(model, config)
+            
+        except Exception as e:
+            self.logger.error(f"Error initializing leftover optimizer: {e}")
+            # Fallback к базовой модели
+            model = LeftoverOptimizationModel()
+            config = {"device": str(self.device)}
+            return LeftoverOptimizer(model, config)
+    
+    def _get_material_distribution(self) -> Dict[str, int]:
+        """Распределение остатков по материалам."""
+        distribution = {}
+        for leftover in self.leftovers_db:
+            material = leftover.material_code
+            distribution[material] = distribution.get(material, 0) + 1
+        return distribution
