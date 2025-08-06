@@ -10,99 +10,92 @@ UI компоненты для системы оптимизации раскр�
 TODO: Реализовать все UI компоненты
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPainter, QPen, QBrush
+import tkinter as tk
+from tkinter import ttk
 
 
-class CuttingCanvas(QWidget):
+class CuttingCanvas(tk.Canvas):
     """
     Холст для отображения карт раскроя.
-    
+
     Позволяет визуализировать результаты оптимизации
     и интерактивно управлять размещением деталей.
     """
-    
-    # Сигналы для взаимодействия с другими компонентами
-    detail_selected = pyqtSignal(str)  # ID выбранной детали
-    detail_moved = pyqtSignal(str, int, int)  # ID, x, y
-    detail_rotated = pyqtSignal(str, int)  # ID, угол поворота
-    
-    def __init__(self, parent=None):
+
+    def __init__(self, parent=None, **kwargs):
         """Инициализация холста."""
-        super().__init__(parent)
-        self.setMinimumSize(800, 600)
-        self.setStyleSheet("background-color: white; border: 1px solid gray;")
-        
-    def paintEvent(self, event):
-        """Отрисовка карты раскроя."""
+        super().__init__(parent, **kwargs)
+        self.configure(width=800, height=600, bg="white", relief="solid", bd=1)
+
+    def draw_layout(self, layout_data):
+        """
+        Отрисовка карты раскроя.
+
+        Args:
+            layout_data: Данные для отрисовки
+        """
         # TODO: Реализовать отрисовку карты раскроя
         pass
-        
-    def mousePressEvent(self, event):
-        """Обработка нажатия мыши."""
+
+    def on_detail_selected(self, event):
+        """Обработка выбора детали."""
         # TODO: Реализовать интерактивность
         pass
 
 
-class MaterialPanel(QWidget):
+class MaterialPanel(ttk.Frame):
     """
     Панель управления материалами.
-    
+
     Позволяет выбирать материалы, настраивать параметры
     и управлять остатками.
     """
-    
-    material_changed = pyqtSignal(str)  # ID выбранного материала
-    
+
     def __init__(self, parent=None):
         """Инициализация панели материалов."""
         super().__init__(parent)
         self.setup_ui()
-        
+
     def setup_ui(self):
         """Настройка пользовательского интерфейса."""
         # TODO: Реализовать UI панели материалов
         pass
-        
-    def load_materials(self, materials_df):
+
+    def load_materials(self, materials_data):
         """
         Загрузка списка материалов.
-        
+
         Args:
-            materials_df: DataFrame с материалами
+            materials_data: Данные с материалами
         """
         # TODO: Реализовать загрузку материалов
         pass
 
 
-class DetailsPanel(QWidget):
+class DetailsPanel(ttk.Frame):
     """
     Панель управления деталями.
-    
+
     Позволяет добавлять, редактировать и удалять детали
     для раскроя.
     """
-    
-    detail_added = pyqtSignal(dict)  # Данные новой детали
-    detail_removed = pyqtSignal(str)  # ID удаляемой детали
-    
+
     def __init__(self, parent=None):
         """Инициализация панели деталей."""
         super().__init__(parent)
         self.setup_ui()
-        
+
     def setup_ui(self):
         """Настройка пользовательского интерфейса."""
         # TODO: Реализовать UI панели деталей
         pass
-        
-    def load_details(self, details_df):
+
+    def load_details(self, details_data):
         """
         Загрузка списка деталей.
-        
+
         Args:
-            details_df: DataFrame с деталями
+            details_data: Данные с деталями
         """
         # TODO: Реализовать загрузку деталей
-        pass 
+        pass

@@ -14,7 +14,7 @@ MDF Cutting Optimizer
 Пример использования:
     from mdf_cutting.core.optimizer import CuttingOptimizer
     from mdf_cutting.ui.desktop_app import CuttingApp
-    
+
     optimizer = CuttingOptimizer()
     app = CuttingApp()
     app.run()
@@ -26,14 +26,14 @@ __email__ = "dev@mdf-cutting.com"
 
 # Основные импорты
 from .core.optimizer import CuttingOptimizer
-from .ui.desktop_app import CuttingApp
 from .data.managers import DataManager
+from .ui.desktop_app import CuttingApp
 
 __all__ = [
-    'CuttingOptimizer',
-    'CuttingApp', 
-    'DataManager',
-    '__version__',
-    '__author__',
-    '__email__'
-] 
+    "CuttingOptimizer",
+    "CuttingApp",
+    "DataManager",
+    "__version__",
+    "__author__",
+    "__email__",
+]

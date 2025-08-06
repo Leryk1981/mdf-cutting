@@ -8,12 +8,7 @@
 - Управление пользовательскими настройками
 """
 
+from .components import CuttingCanvas, DetailsPanel, MaterialPanel
 from .desktop_app import CuttingApp
-from .components import CuttingCanvas, MaterialPanel, DetailsPanel
 
-__all__ = [
-    'CuttingApp',
-    'CuttingCanvas',
-    'MaterialPanel', 
-    'DetailsPanel'
-] 
+__all__ = ["CuttingApp", "CuttingCanvas", "MaterialPanel", "DetailsPanel"]

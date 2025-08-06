@@ -8,14 +8,14 @@
 - Оптимизацию раскроя
 """
 
+from .dxf_generator import DXFGenerator
 from .optimizer import CuttingOptimizer
 from .packing import PackingAlgorithm
-from .dxf_generator import DXFGenerator
 from .remnants import RemnantsManager
 
 __all__ = [
-    'CuttingOptimizer',
-    'PackingAlgorithm', 
-    'DXFGenerator',
-    'RemnantsManager'
-] 
+    "CuttingOptimizer",
+    "PackingAlgorithm",
+    "DXFGenerator",
+    "RemnantsManager",
+]

@@ -8,12 +8,8 @@
 - Управление конфигурациями
 """
 
+from .converters import FormatConverter
 from .managers import DataManager
 from .validators import DataValidator
-from .converters import FormatConverter
 
-__all__ = [
-    'DataManager',
-    'DataValidator',
-    'FormatConverter'
-] 
+__all__ = ["DataManager", "DataValidator", "FormatConverter"]

@@ -8,14 +8,9 @@ AI модуль для автоматической корректировки �
 - Интеграцию с основной системой раскроя
 """
 
+from .data_collector import DataCollector
 from .dxf_parser import DXFParser
 from .ml_model import CuttingOptimizer
 from .validator import LayoutValidator
-from .data_collector import DataCollector
 
-__all__ = [
-    'DXFParser',
-    'CuttingOptimizer', 
-    'LayoutValidator',
-    'DataCollector'
-] 
+__all__ = ["DXFParser", "CuttingOptimizer", "LayoutValidator", "DataCollector"]
