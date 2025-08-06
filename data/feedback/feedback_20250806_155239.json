@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-08-06T15:52:39.572271",
+  "ai_enabled": true,
+  "leftovers_enabled": true,
+  "job_id": "test_job_001",
+  "satisfaction_rating": 4,
+  "accepted_corrections": [
+    "correction_1"
+  ],
+  "rejected_corrections": [],
+  "comments": "Отличная работа AI!"
+}
