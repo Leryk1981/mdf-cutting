@@ -8,11 +8,13 @@
 - Сохранение оригинальных форматов
 """
 
-import pandas as pd
 from pathlib import Path
-from typing import List, Any
+from typing import Any, List
+
+import pandas as pd
+
 from ..config.loader import ConfigLoader
-from .schemas import OrderData, CorrectionData, MaterialProperties
+from .schemas import CorrectionData, MaterialProperties, OrderData
 
 
 class TableDataExtractor:

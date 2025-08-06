@@ -2,13 +2,15 @@
 Тесты для извлекателя табличных данных.
 """
 
-import pytest
-import pandas as pd
 from pathlib import Path
 from unittest.mock import Mock
-from src.mdf_cutting.data_collectors.table_extractor import TableDataExtractor
+
+import pandas as pd
+import pytest
+
+from src.mdf_cutting.config import TableColumn, TableFormat
 from src.mdf_cutting.config.loader import ConfigLoader
-from src.mdf_cutting.config import TableFormat, TableColumn
+from src.mdf_cutting.data_collectors.table_extractor import TableDataExtractor
 
 
 class TestTableDataExtractor:

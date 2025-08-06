@@ -9,10 +9,12 @@
 - Статистику использования материала
 """
 
+from pathlib import Path
+from typing import Any, Dict, List
+
 import ezdxf
 import numpy as np
-from pathlib import Path
-from typing import List, Dict, Any
+
 from ..config.loader import ConfigLoader
 from .schemas import DxfData, DxfEntity, DxfMetadata, DxfStatistics
 

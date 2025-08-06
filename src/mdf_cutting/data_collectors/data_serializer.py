@@ -9,11 +9,12 @@
 """
 
 import json
-import numpy as np
-from pathlib import Path
-from typing import List, Dict, Any
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
+
 import h5py
+import numpy as np
 
 
 class NumpyEncoder(json.JSONEncoder):

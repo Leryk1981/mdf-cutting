@@ -2,12 +2,14 @@
 Тесты для DXF парсера.
 """
 
-import pytest
-import numpy as np
 from pathlib import Path
 from unittest.mock import Mock, patch
-from src.mdf_cutting.data_collectors.dxf_parser import DxfParser
+
+import numpy as np
+import pytest
+
 from src.mdf_cutting.config.loader import ConfigLoader
+from src.mdf_cutting.data_collectors.dxf_parser import DxfParser
 
 
 class TestDxfParser:
