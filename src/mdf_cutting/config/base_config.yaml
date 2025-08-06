@@ -1,0 +1,39 @@
+# Базовые параметры системы MDF Cutting
+optimization:
+  max_iterations: 10000
+  tolerance: 0.001
+  population_size: 50
+  mutation_rate: 0.1
+  crossover_rate: 0.8
+  elite_size: 5
+
+material:
+  default_thickness: 16  # мм
+  kerf_width: 3.2        # ширина реза в мм
+  min_strip_width: 10    # минимальная ширина полосы
+  max_strip_width: 2500  # максимальная ширина полосы
+  default_margin: 6      # отступ по умолчанию в мм
+
+cutting:
+  min_cut_length: 5      # минимальная длина реза в мм
+  max_cut_length: 3000   # максимальная длина реза в мм
+  precision: 0.1         # точность измерений в мм
+  safety_margin: 2.0     # безопасный отступ в мм
+
+logging:
+  level: INFO
+  file_format: "{date}_{process}.log"
+  max_file_size: 10      # МБ
+  backup_count: 5
+
+output:
+  dxf_version: "R2010"
+  layer_prefix: "CUT_"
+  text_height: 2.5       # высота текста в мм
+  dimension_offset: 5     # отступ размеров в мм
+
+performance:
+  max_memory_usage: 512  # МБ
+  timeout_seconds: 300   # секунд
+  parallel_processing: true
+  max_workers: 4 

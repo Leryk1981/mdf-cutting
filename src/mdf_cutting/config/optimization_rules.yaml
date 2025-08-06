@@ -1,0 +1,61 @@
+# Правила оптимизации для конкретного производства
+mdf_16mm:
+  - name: "basic_cutting"
+    min_spacing: 5.0    # минимальный отступ в мм
+    max_cuts: 50        # максимальное количество резов
+    material_types: ["MDF", "LDPE"]
+    priority: 1
+    description: "Базовое правило раскроя для МДФ 16мм"
+  
+  - name: "complex_shapes"
+    min_spacing: 3.0
+    max_cuts: 100
+    material_types: ["MDF"]
+    priority: 2
+    description: "Сложные формы для МДФ 16мм"
+
+mdf_18mm:
+  - name: "heavy_duty"
+    min_spacing: 7.0
+    max_cuts: 30
+    material_types: ["MDF", "HDPE"]
+    priority: 1
+    description: "Тяжелые условия для МДФ 18мм"
+  
+  - name: "precision_cutting"
+    min_spacing: 4.0
+    max_cuts: 75
+    material_types: ["MDF"]
+    priority: 2
+    description: "Точный раскрой для МДФ 18мм"
+
+mdf_12mm:
+  - name: "light_duty"
+    min_spacing: 3.0
+    max_cuts: 80
+    material_types: ["MDF", "LDPE"]
+    priority: 1
+    description: "Легкие условия для МДФ 12мм"
+  
+  - name: "high_density"
+    min_spacing: 2.5
+    max_cuts: 120
+    material_types: ["MDF"]
+    priority: 2
+    description: "Высокая плотность для МДФ 12мм"
+
+hdf_8mm:
+  - name: "ultra_precision"
+    min_spacing: 2.0
+    max_cuts: 150
+    material_types: ["HDF"]
+    priority: 1
+    description: "Ультра-точный раскрой для HDF 8мм"
+
+plywood_6mm:
+  - name: "plywood_standard"
+    min_spacing: 4.0
+    max_cuts: 60
+    material_types: ["PLYWOOD"]
+    priority: 1
+    description: "Стандартный раскрой для фанеры 6мм" 

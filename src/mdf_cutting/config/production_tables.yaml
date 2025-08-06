@@ -1,0 +1,93 @@
+# Стандартные форматы таблиц заказчика (без изменения)
+standard_table:
+  id: "standard_table"
+  name: "Стандартная таблица раскроя"
+  delimiter: ";"
+  encoding: "utf-8"
+  columns:
+    - name: "material_code"
+      type: "str"
+      required: true
+      description: "Код материала"
+    - name: "length"
+      type: "float"
+      required: true
+      description: "Длина детали в мм"
+    - name: "width"
+      type: "float"
+      required: true
+      description: "Ширина детали в мм"
+    - name: "quantity"
+      type: "int"
+      required: false
+      description: "Количество деталей"
+    - name: "thickness"
+      type: "float"
+      required: false
+      description: "Толщина материала в мм"
+    - name: "material"
+      type: "str"
+      required: false
+      description: "Тип материала"
+
+customer_legacy_table:
+  id: "customer_legacy_table"
+  name: "Устаревший формат клиента"
+  delimiter: ","
+  encoding: "cp1251"
+  columns:
+    - name: "part_id"
+      type: "str"
+      required: true
+      description: "ID детали"
+    - name: "order_id"
+      type: "str"
+      required: true
+      description: "ID заказа"
+    - name: "length_mm"
+      type: "float"
+      required: true
+      description: "Длина в мм"
+    - name: "width_mm"
+      type: "float"
+      required: true
+      description: "Ширина в мм"
+    - name: "qty"
+      type: "int"
+      required: true
+      description: "Количество"
+    - name: "thickness_mm"
+      type: "float"
+      required: false
+      description: "Толщина в мм"
+
+materials_table:
+  id: "materials_table"
+  name: "Таблица материалов"
+  delimiter: ";"
+  encoding: "utf-8"
+  columns:
+    - name: "material_code"
+      type: "str"
+      required: true
+      description: "Код материала"
+    - name: "thickness_mm"
+      type: "float"
+      required: true
+      description: "Толщина в мм"
+    - name: "sheet_length_mm"
+      type: "float"
+      required: true
+      description: "Длина листа в мм"
+    - name: "sheet_width_mm"
+      type: "float"
+      required: true
+      description: "Ширина листа в мм"
+    - name: "material"
+      type: "str"
+      required: true
+      description: "Тип материала"
+    - name: "quantity"
+      type: "int"
+      required: false
+      description: "Количество листов" 
