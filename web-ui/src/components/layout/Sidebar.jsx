@@ -19,6 +19,7 @@ import {
   Psychology,
   Settings,
   TrendingUp,
+  GridView,
 } from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
@@ -45,6 +46,12 @@ const menuItems = [
     icon: <TrendingUp />,
     path: '/optimization',
     page: 'optimization',
+  },
+  {
+    text: 'Карты раскроя',
+    icon: <GridView />,
+    path: '/cutting-maps',
+    page: 'cutting-maps',
   },
   {
     text: 'Управление материалами',
