@@ -18,6 +18,7 @@ import {
   Assessment,
   Psychology,
   Settings,
+  TrendingUp,
 } from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
@@ -34,10 +35,16 @@ const menuItems = [
     page: 'dashboard',
   },
   {
-    text: 'Оптимизация раскроя',
+    text: 'Раскрой MDF',
     icon: <ScatterPlot />,
     path: '/cutting',
     page: 'cutting',
+  },
+  {
+    text: 'Оптимизация раскроя',
+    icon: <TrendingUp />,
+    path: '/optimization',
+    page: 'optimization',
   },
   {
     text: 'Управление материалами',

@@ -5,14 +5,14 @@ AI-улучшенный пользовательский интерфейс.
 использующие стили из UI шаблона для создания профессионального и консистентного интерфейса.
 """
 
-from .styles import AIStyles
 from .ai_control_panel import ImprovedAIControlPanel
-from .toast_notification import ToastNotification
 from .feedback_dialog import ImprovedFeedbackDialog
+from .styles import AIStyles
+from .toast_notification import ToastNotification
 
 __all__ = [
-    'AIStyles',
-    'ImprovedAIControlPanel', 
-    'ToastNotification',
-    'ImprovedFeedbackDialog'
-] 
+    "AIStyles",
+    "ImprovedAIControlPanel",
+    "ToastNotification",
+    "ImprovedFeedbackDialog",
+]

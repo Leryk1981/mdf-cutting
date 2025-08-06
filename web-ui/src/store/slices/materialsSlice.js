@@ -18,10 +18,18 @@ export const addMaterial = createAsyncThunk(
   }
 )
 
+export const createMaterial = createAsyncThunk(
+  'materials/createMaterial',
+  async (material) => {
+    const response = await materialsService.createMaterial(material)
+    return response
+  }
+)
+
 export const updateMaterial = createAsyncThunk(
   'materials/updateMaterial',
-  async ({ id, material }) => {
-    const response = await materialsService.updateMaterial(id, material)
+  async ({ id, data }) => {
+    const response = await materialsService.updateMaterial(id, data)
     return response
   }
 )
@@ -31,6 +39,14 @@ export const deleteMaterial = createAsyncThunk(
   async (id) => {
     await materialsService.deleteMaterial(id)
     return id
+  }
+)
+
+export const uploadMaterialsFile = createAsyncThunk(
+  'materials/uploadMaterialsFile',
+  async (file) => {
+    const response = await materialsService.uploadMaterialsFile(file)
+    return response
   }
 )
 
@@ -74,6 +90,13 @@ const materialsSlice = createSlice({
       .addCase(addMaterial.rejected, (state, action) => {
         state.error = action.error.message
       })
+      // Create material
+      .addCase(createMaterial.fulfilled, (state, action) => {
+        state.materials.push(action.payload)
+      })
+      .addCase(createMaterial.rejected, (state, action) => {
+        state.error = action.error.message
+      })
       // Update material
       .addCase(updateMaterial.fulfilled, (state, action) => {
         const index = state.materials.findIndex(m => m.id === action.payload.id)
@@ -89,6 +112,13 @@ const materialsSlice = createSlice({
         state.materials = state.materials.filter(m => m.id !== action.payload)
       })
       .addCase(deleteMaterial.rejected, (state, action) => {
+        state.error = action.error.message
+      })
+      // Upload materials file
+      .addCase(uploadMaterialsFile.fulfilled, (state, action) => {
+        state.materials = action.payload.materials || []
+      })
+      .addCase(uploadMaterialsFile.rejected, (state, action) => {
         state.error = action.error.message
       })
   },
