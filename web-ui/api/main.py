@@ -1,23 +1,19 @@
 import io
 import json
-import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import ezdxf
-import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import uvicorn
 
 # Импортируем наш движок раскроя
 from cutting_engine import cutting_engine
-from ezdxf.document import Drawing
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from matplotlib.backends.backend_pdf import PdfPages
 from pydantic import BaseModel
 
@@ -272,6 +268,7 @@ async def upload_details_file(file: UploadFile = File(...)):
 # API для оптимизации раскроя
 @app.post("/api/optimize-cutting")
 async def optimize_cutting(request: CuttingRequest):
+    global materials_data
     try:
         if request.file_id not in uploaded_files:
             raise HTTPException(status_code=404, detail="Файл не найден")

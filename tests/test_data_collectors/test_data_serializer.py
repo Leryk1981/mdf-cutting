@@ -6,9 +6,10 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-import h5py
 import numpy as np
 import pytest
+
+h5py = pytest.importorskip("h5py")
 
 from src.mdf_cutting.data_collectors.data_serializer import (
     MLDataSerializer,

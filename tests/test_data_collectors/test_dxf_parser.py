@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
+pytest.importorskip("torch")
+
 from src.mdf_cutting.config.loader import ConfigLoader
 from src.mdf_cutting.data_collectors.dxf_parser import DxfParser
 
@@ -80,7 +82,6 @@ class TestDxfParser:
         """Тест извлечения заготовок из пустых данных."""
         from src.mdf_cutting.data_collectors.schemas import (
             DxfData,
-            DxfEntity,
             DxfMetadata,
             DxfStatistics,
         )
@@ -110,7 +111,6 @@ class TestDxfParser:
         """Тест определения областей отходов для пустых данных."""
         from src.mdf_cutting.data_collectors.schemas import (
             DxfData,
-            DxfEntity,
             DxfMetadata,
             DxfStatistics,
         )

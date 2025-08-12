@@ -5,10 +5,9 @@
 из src/mdf_cutting/core/ в FastAPI приложение.
 """
 
-import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import pandas as pd
 
@@ -115,7 +114,7 @@ class CuttingEngine:
         """Инициализация движка раскроя."""
         try:
             self.remnants_manager = RemnantsManager()
-        except:
+        except Exception:
             self.remnants_manager = None
         self.output_dir = Path("output")
         self.output_dir.mkdir(exist_ok=True)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mdf-cutting-optimizer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Система для оптимизации раскроя МДФ с функциями AI-коррекции"
 authors = [
     {name = "AI Development Team", email = "dev@mdf-cutting.com"}

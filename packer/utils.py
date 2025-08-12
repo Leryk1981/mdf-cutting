@@ -1,5 +1,4 @@
 import logging
-import re
 
 import pandas as pd
 
@@ -357,19 +356,3 @@ def check_critical_values(details_df, materials_df):
         return False
 
     return True
-
-
-def prepare_materials_df(materials_df):
-    """Подготовка таблицы материалов"""
-    if "is_remnant" not in materials_df.columns:
-        materials_df["is_remnant"] = materials_df.apply(
-            lambda row: is_remnant(
-                row["sheet_length_mm"], row["sheet_width_mm"]
-            ),
-            axis=1,
-        )
-
-    # Приводим material к верхнему регистру для консистентности
-    materials_df["material"] = materials_df["material"].astype(str).str.upper()
-
-    return materials_df

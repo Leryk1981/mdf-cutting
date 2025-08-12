@@ -1,7 +1,5 @@
 import os.path
-import re
 
-import ezdxf
 from ezdxf.filemanagement import new
 
 from .config import logger
@@ -112,7 +110,7 @@ def add_bevel_lines(
     layer_name = safe_layer_name
 
     try:
-        existing_layers = [l.dxf.name for l in msp.doc.layers]
+        existing_layers = [layer.dxf.name for layer in msp.doc.layers]
         if layer_name not in existing_layers:
             msp.doc.layers.new(layer_name, dxfattribs={"color": 1})
             logger.info(f"Создан новый слой фаски: {layer_name}")
@@ -239,7 +237,7 @@ def add_bevel_lines(
 
             msp.add_lwpolyline(points, dxfattribs=layer_attributes)
             logger.info(
-                f"Добавлена замкнутая полилиния фаски по всему периметру"
+                "Добавлена замкнутая полилиния фаски по всему периметру"
             )
             return  # Выходим из функции, так как фаска уже нарисована
 
@@ -370,13 +368,13 @@ def add_layout_filename_title(msp, sheet_length, sheet_width, filename):
                 # Используем явные атрибуты выравнивания
                 text_entity.dxf.halign = 2  # По правому краю
                 text_entity.dxf.valign = 3  # По верху
-            except:
+            except Exception:
                 # Если не поддерживается, используем метод set_pos
                 try:
                     text_entity.set_pos(
                         (sheet_length, sheet_width), align="TOP_RIGHT"
                     )
-                except:
+                except Exception:
                     # Если и это не работает, делаем приближение вручную
                     # Оценим длину текста (примерно 40 пикселей на символ при высоте 60)
                     text_width = len(base_filename) * 40
@@ -410,7 +408,6 @@ def add_details_list(msp, sheet_width, details_list, filename=None):
     try:
         # Высота строки и отступ (40 + 40 = 80)
         line_height = 80
-        start_y = 0  # Начинаем от нулевой координаты
         line_index = 0  # Индекс строки
 
         # Добавляем имя файла как первый пункт с увеличенной высотой

@@ -1,16 +1,14 @@
 import os
+import pytest
 
-from rectpack import (
-    GuillotineBssfSas,
-    MaxRectsBaf,
-    MaxRectsBlsf,
-    SkylineBl,
-    newPacker,
-)
+pytest.importorskip("torch")
+pytest.importorskip("h5py")
 
-from .config import logger
-from .constants import DEFAULT_KERF, DEFAULT_MARGIN
-from .dxf_generator import (
+from rectpack import MaxRectsBlsf, newPacker
+
+from src.mdf_cutting.utils.config import logger
+from src.mdf_cutting.utils.math_utils import DEFAULT_KERF, DEFAULT_MARGIN
+from src.mdf_cutting.core.dxf_generator import (
     add_detail_to_sheet,
     add_details_list,
     add_layout_filename_title,
@@ -160,7 +158,7 @@ def test_maxrects_blsf(
         material_mask = (
             (materials_df["thickness_mm"] == thickness)
             & (materials_df["material"] == material)
-            & (materials_df["is_remnant"] == False)
+            & (~materials_df["is_remnant"])
         )
         material_sheets = materials_df[material_mask].copy()
         if material_sheets.empty:
@@ -411,7 +409,7 @@ def test_various_algorithms(
             material_mask = (
                 (materials_df["thickness_mm"] == thickness)
                 & (materials_df["material"] == material)
-                & (materials_df["is_remnant"] == False)
+                & (~materials_df["is_remnant"])
             )
             material_sheets = materials_df[material_mask].copy()
             if material_sheets.empty:

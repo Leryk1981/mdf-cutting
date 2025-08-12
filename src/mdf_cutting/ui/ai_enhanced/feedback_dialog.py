@@ -187,7 +187,7 @@ class ImprovedFeedbackDialog(tk.Toplevel):
         }
 
         try:
-            result = self.feedback_collector.collect_feedback(feedback_data)
+            self.feedback_collector.collect_feedback(feedback_data)
 
             # Показ успешного отправления
             self.show_success_message()

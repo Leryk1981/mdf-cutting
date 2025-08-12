@@ -3,9 +3,11 @@
 """
 
 import json
+import pytest
+
+pytest.importorskip("torch")
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import Mock
 
 from src.mdf_cutting.data_collectors.correction_logger import (
     CorrectionEvent,

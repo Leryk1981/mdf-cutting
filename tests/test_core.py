@@ -4,6 +4,10 @@
 Тестирует основные алгоритмы упаковки и оптимизации.
 """
 
+import pytest
+
+pytest.importorskip("torch")
+
 from src.mdf_cutting.core.optimizer import CuttingOptimizer
 
 

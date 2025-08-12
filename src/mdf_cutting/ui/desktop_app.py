@@ -325,8 +325,8 @@ class CuttingApp:
             try:
                 os.makedirs(self.pattern_dir)
                 logger.info(f"Создана директория: {self.pattern_dir}")
-            except Exception as e:
-                logger.error(f"Не удалось создать директорию: {str(e)}")
+            except Exception:
+                pass
 
         # Проверка директории вывода
         self.output_dir = self.output_dir_entry.get()
@@ -617,14 +617,15 @@ class CuttingApp:
                 pass  # No cleanup manager, so no cleanup here
 
         except Exception as e:
-            logger.error(f"Ошибка при выполнении раскроя: {str(e)}")
+            error_message = f"Ошибка при выполнении раскроя: {str(e)}"
+            logger.error(error_message)
             import traceback
 
             logger.error(traceback.format_exc())
             self.root.after(
                 0,
                 lambda: messagebox.showerror(
-                    "Ошибка", f"Ошибка при выполнении раскроя: {str(e)}"
+                    "Ошибка", error_message
                 ),
             )
 

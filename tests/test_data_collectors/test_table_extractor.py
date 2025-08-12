@@ -8,6 +8,8 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
+pytest.importorskip("torch")
+
 from src.mdf_cutting.config import TableColumn, TableFormat
 from src.mdf_cutting.config.loader import ConfigLoader
 from src.mdf_cutting.data_collectors.table_extractor import TableDataExtractor
@@ -172,7 +174,7 @@ class TestTableDataExtractor:
         test_data = pd.DataFrame(
             {
                 "material_code": ["MDF_16"],
-                "length": ["100"]
+                "length": ["100"],
                 # Отсутствуют обязательные колонки width, thickness, material
             }
         )

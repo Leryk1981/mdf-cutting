@@ -9,23 +9,19 @@
 
 from .models import (
     CorrectionPredictionModel,
-    EnsembleCorrectionModel,
     CorrectionReinforcementModel,
+    CuttingMapCNN,
+    EnsembleCorrectionModel,
     HybridCorrectionModel,
-    CuttingMapCNN
 )
-
-from .trainers import (
-    CorrectionModelTrainer,
-    ReinforcementTrainer
-)
+from .trainers import CorrectionModelTrainer, ReinforcementTrainer
 
 __all__ = [
     "CorrectionPredictionModel",
-    "EnsembleCorrectionModel", 
+    "EnsembleCorrectionModel",
     "CorrectionReinforcementModel",
     "HybridCorrectionModel",
     "CuttingMapCNN",
     "CorrectionModelTrainer",
-    "ReinforcementTrainer"
-] 
+    "ReinforcementTrainer",
+]

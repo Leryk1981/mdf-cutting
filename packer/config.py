@@ -1,5 +1,4 @@
 import logging
-import os
 
 # Файл логирования
 LOG_FILE = "packer.log"

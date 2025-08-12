@@ -108,24 +108,26 @@ class AIIntegrationService:
                     result = self._apply_correction(correction, final_result)
                     if result["status"] == "success":
                         final_corrections.append(correction)
-                        dxf_path = Path(result["corrected_file"])
+                        Path(result["corrected_file"])
 
             # 6. Формирование итогового результата
             processing_time = (datetime.now() - start_time).total_seconds()
 
             result = {
                 **final_result,
-                "ai_enhancements": ai_enhancement["corrections"]
-                if ai_enhancement
-                else [],
+                "ai_enhancements": (
+                    ai_enhancement["corrections"] if ai_enhancement else []
+                ),
                 "applied_corrections": final_corrections,
-                "was_ai_assisted": ai_enhancement["enhancement_applied"]
-                if ai_enhancement
-                else False,
+                "was_ai_assisted": (
+                    ai_enhancement["enhancement_applied"]
+                    if ai_enhancement
+                    else False
+                ),
                 "leftovers_analysis": leftovers_analysis,
-                "ai_confidence": ai_enhancement["ai_confidence"]
-                if ai_enhancement
-                else 0.0,
+                "ai_confidence": (
+                    ai_enhancement["ai_confidence"] if ai_enhancement else 0.0
+                ),
                 "processing_time_ms": int(processing_time * 1000),
                 "timestamp": datetime.now().isoformat(),
             }
@@ -245,15 +247,14 @@ class AIIntegrationService:
             return {
                 "use_leftovers": use_leftovers,
                 "suitable_leftovers": suitable_leftovers,
-                "total_area_ratio": total_leftover_area / total_area
-                if total_area > 0
-                else 0,
-                "estimation_savings": min(
-                    total_leftover_area / total_area, 1.0
-                )
-                * 100
-                if total_area > 0
-                else 0,
+                "total_area_ratio": (
+                    total_leftover_area / total_area if total_area > 0 else 0
+                ),
+                "estimation_savings": (
+                    min(total_leftover_area / total_area, 1.0) * 100
+                    if total_area > 0
+                    else 0
+                ),
                 "leftovers_count": len(suitable_leftovers),
             }
 

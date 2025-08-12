@@ -5,10 +5,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
-import pandas as pd
 
 from packer.cleanup import CleanupManager
-from packer.config import logger, setup_logging
+from packer.config import logger
 from packer.constants import (
     DEFAULT_KERF,
     DEFAULT_MARGIN,
@@ -610,14 +609,15 @@ class CuttingAppGUI:
                 self.cleanup_manager.cleanup_all(keep_output=True)
 
         except Exception as e:
-            logger.error(f"Ошибка при выполнении раскроя: {str(e)}")
+            error_message = f"Ошибка при выполнении раскроя: {str(e)}"
+            logger.error(error_message)
             import traceback
 
             logger.error(traceback.format_exc())
             self.root.after(
                 0,
                 lambda: messagebox.showerror(
-                    "Ошибка", f"Ошибка при выполнении раскроя: {str(e)}"
+                    "Ошибка", error_message
                 ),
             )
 

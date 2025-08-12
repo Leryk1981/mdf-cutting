@@ -1,6 +1,4 @@
-import numpy as np
 import pandas as pd
-from rectpack import newPacker
 
 from .config import logger
 
@@ -193,7 +191,7 @@ class RemnantsManager:
         # Просто выведем для диагностики несколько значений
         mask = ~updated_materials["remnant_id"].isna()
         if mask.any():
-            logger.info(f"Примеры текущих значений remnant_id:")
+            logger.info("Примеры текущих значений remnant_id:")
             for idx, val in (
                 updated_materials.loc[mask, "remnant_id"].head(5).items()
             ):
@@ -206,7 +204,7 @@ class RemnantsManager:
             material_mask = (
                 (updated_materials["thickness_mm"] == thickness)
                 & (updated_materials["material"] == material)
-                & (updated_materials["is_remnant"] == False)
+                & (~updated_materials["is_remnant"])
             )
             thickness_rows = updated_materials[material_mask]
             if thickness_rows.empty:
@@ -231,12 +229,12 @@ class RemnantsManager:
             material_mask = (
                 (updated_materials["thickness_mm"] == thickness)
                 & (updated_materials["material"] == material)
-                & (updated_materials["is_remnant"] == False)
+                & (~updated_materials["is_remnant"])
             )
             material_rows = updated_materials[material_mask]
             if material_rows.empty:
                 logger.warning(
-                    f"Не найдены целые листы для уменьшения количества"
+                    "Не найдены целые листы для уменьшения количества"
                 )
             else:
                 remaining_sheets = used_sheets
@@ -372,7 +370,7 @@ class RemnantsManager:
             # Для диагностики выведем несколько значений remnant_id
             mask = ~output_df["remnant_id"].isna()
             if mask.any():
-                logger.info(f"Примеры значений remnant_id перед сохранением:")
+                logger.info("Примеры значений remnant_id перед сохранением:")
                 for idx, val in (
                     output_df.loc[mask, "remnant_id"].head(5).items()
                 ):
@@ -415,10 +413,10 @@ class RemnantsManager:
             logger.info(f"Таблица сохранена в {output_path}")
 
             # Выводим статистику сохраненной таблицы
-            remnants_count = (output_df["is_remnant"] == True).sum()
+            remnants_count = (output_df["is_remnant"]).sum()
             logger.info(f"В сохраненной таблице {remnants_count} остатков")
             remnants_with_id = (
-                (output_df["is_remnant"] == True)
+                (output_df["is_remnant"])
                 & (~output_df["remnant_id"].isna())
             ).sum()
             logger.info(f"Из них {remnants_with_id} имеют идентификаторы")

@@ -233,9 +233,7 @@ def pack_and_generate_dxf(
 
         # Подготовка остатков
         remnants = []
-        remnant_sheets = material_sheets[
-            material_sheets["is_remnant"] == True
-        ].copy()
+        remnant_sheets = material_sheets[material_sheets["is_remnant"]].copy()
         logger.info(f"Найдено {len(remnant_sheets)} типов остатков")
 
         # Создаем словарь для просмотра остатков по их ID
@@ -286,9 +284,7 @@ def pack_and_generate_dxf(
 
         # Подготовка целых листов
         full_sheets = []
-        full_sheet_rows = material_sheets[
-            material_sheets["is_remnant"] == False
-        ]
+        full_sheet_rows = material_sheets[~material_sheets["is_remnant"]]
 
         for _, row in full_sheet_rows.iterrows():
             sheet_length = float(row["sheet_length_mm"])
@@ -671,7 +667,7 @@ def pack_and_generate_dxf(
 
             # Создаем маску для строк, которые нужно удалить
             before_count = len(current_materials_df)
-            delete_mask = (current_materials_df["is_remnant"] == True) & (
+            delete_mask = (current_materials_df["is_remnant"]) & (
                 current_materials_df["remnant_id"].isin(list(used_remnant_ids))
             )
 
@@ -690,7 +686,7 @@ def pack_and_generate_dxf(
         std_material_mask = (
             (current_materials_df["thickness_mm"] == thickness)
             & (current_materials_df["material"] == material)
-            & (current_materials_df["is_remnant"] == False)
+            & (~current_materials_df["is_remnant"])
         )
 
         if std_material_mask.any():

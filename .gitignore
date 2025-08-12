@@ -65,3 +65,8 @@ web-ui/.env.local
 web-ui/.env.development.local
 web-ui/.env.test.local
 web-ui/.env.production.local
+
+# Large artifacts
+output/
+test.pdf
+test_model.pth

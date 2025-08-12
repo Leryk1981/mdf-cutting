@@ -8,10 +8,11 @@
 - Конфигурацию сбора данных
 """
 
-from pathlib import Path
-from typing import List, Dict, Any, Optional
 from datetime import datetime
-from pydantic import BaseModel, validator, Field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, validator
 
 
 class DxfEntity(BaseModel):

@@ -10,9 +10,6 @@
 TODO: Реализовать все конвертеры
 """
 
-from typing import Dict
-
-
 class FormatConverter:
     """
     Основной класс для конвертации форматов данных.

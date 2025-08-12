@@ -23,7 +23,9 @@ class CorrectionEvent:
     timestamp: datetime
     dxf_file: str
     operator_id: str
-    correction_type: str  # "position", "rotation", "dimension_change", "custom"
+    correction_type: (
+        str  # "position", "rotation", "dimension_change", "custom"
+    )
     affected_pieces: List[str]
     before_state: Dict[str, Any]
     after_state: Dict[str, Any]
@@ -121,7 +123,7 @@ class DataCollectionLogger:
         self,
         error_type: str,
         error_message: str,
-        context: Dict[str, Any] = None
+        context: Dict[str, Any] = None,
     ) -> None:
         """
         Зарегистрировать ошибку обработки.

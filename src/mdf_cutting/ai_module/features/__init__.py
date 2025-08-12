@@ -8,11 +8,11 @@
 """
 
 from .geometry import GeometryFeatureExtractor
-from .optimization import OptimizationFeatureExtractor
 from .material import MaterialFeatureExtractor
+from .optimization import OptimizationFeatureExtractor
 
 __all__ = [
     "GeometryFeatureExtractor",
-    "OptimizationFeatureExtractor", 
-    "MaterialFeatureExtractor"
-] 
+    "OptimizationFeatureExtractor",
+    "MaterialFeatureExtractor",
+]

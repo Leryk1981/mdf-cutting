@@ -9,9 +9,7 @@
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
-import numpy as np
+from typing import Any, Dict, List, Optional
 
 from ..ai_module.api.correction_api import CorrectionAPI
 from ..ai_module.features.geometry import GeometryFeatureExtractor

@@ -14,8 +14,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import numpy as np
-
 from ..config.loader import ConfigLoader
 
 
@@ -213,9 +211,9 @@ class FeedbackCollector:
             for field in required_fields:
                 if field not in feedback_data:
                     validation_result["is_valid"] = False
-                    validation_result[
-                        "reason"
-                    ] = f"Missing required field: {field}"
+                    validation_result["reason"] = (
+                        f"Missing required field: {field}"
+                    )
                     return validation_result
 
             # Проверка рейтинга удовлетворенности
@@ -226,9 +224,9 @@ class FeedbackCollector:
                 or satisfaction > 5
             ):
                 validation_result["is_valid"] = False
-                validation_result[
-                    "reason"
-                ] = "Invalid satisfaction rating (must be 1-5)"
+                validation_result["reason"] = (
+                    "Invalid satisfaction rating (must be 1-5)"
+                )
                 return validation_result
 
             # Проверка корректировок
@@ -309,9 +307,11 @@ class FeedbackCollector:
                 {
                     "timestamp": feedback["timestamp"],
                     "satisfaction": satisfaction,
-                    "acceptance_rate": accepted / total_suggestions
-                    if total_suggestions > 0
-                    else 0,
+                    "acceptance_rate": (
+                        accepted / total_suggestions
+                        if total_suggestions > 0
+                        else 0
+                    ),
                 }
             )
 
@@ -367,9 +367,11 @@ class FeedbackCollector:
                 / len(relevant_feedback),
                 "total_accepted": total_accepted,
                 "total_rejected": total_rejected,
-                "average_acceptance_rate": total_accepted / total_suggestions
-                if total_suggestions > 0
-                else 0,
+                "average_acceptance_rate": (
+                    total_accepted / total_suggestions
+                    if total_suggestions > 0
+                    else 0
+                ),
                 "feedback_ids": [f["feedback_id"] for f in relevant_feedback],
             }
 
@@ -420,11 +422,6 @@ class FeedbackCollector:
             return "stable"
 
         recent_avg = sum(h["satisfaction"] for h in history[-5:]) / 5
-        older_avg = (
-            sum(h["satisfaction"] for h in history[-10:-5]) / 5
-            if len(history) >= 10
-            else recent_avg
-        )
 
         if current_satisfaction > recent_avg + 0.5:
             return "improving"

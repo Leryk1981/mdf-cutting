@@ -6,12 +6,16 @@
 
 import os
 import sys
-import tkinter as tk
-import unittest
-from unittest.mock import MagicMock, Mock, patch
 
 # Добавление пути к модулям
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+import tkinter as tk
+import unittest
+import pytest
+
+pytest.importorskip("torch")
+from unittest.mock import Mock, patch
 
 from mdf_cutting.integration.ai_integration_service import AIIntegrationService
 from mdf_cutting.integration.feedback_collector import FeedbackCollector

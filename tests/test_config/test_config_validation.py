@@ -3,8 +3,11 @@
 """
 
 import pytest
+
+pytest.importorskip("torch")
 from pydantic import ValidationError
-from src.mdf_cutting.config import TableFormat, OptimizationRule, ConfigManager
+
+from src.mdf_cutting.config import ConfigManager, OptimizationRule, TableFormat
 
 
 class TestTableFormatValidation:
@@ -15,10 +18,8 @@ class TestTableFormatValidation:
         valid_data = {
             "id": "test_format",
             "name": "Test Format",
-            "columns": [
-                {"name": "col1", "type": "str", "required": True}
-            ],
-            "delimiter": ";"
+            "columns": [{"name": "col1", "type": "str", "required": True}],
+            "delimiter": ";",
         }
         table_format = TableFormat(**valid_data)
         assert table_format.id == "test_format"
@@ -29,10 +30,8 @@ class TestTableFormatValidation:
         invalid_data = {
             "id": "",
             "name": "Test Format",
-            "columns": [
-                {"name": "col1", "type": "str", "required": True}
-            ],
-            "delimiter": ";"
+            "columns": [{"name": "col1", "type": "str", "required": True}],
+            "delimiter": ";",
         }
         with pytest.raises(ValidationError):
             TableFormat(**invalid_data)
@@ -43,7 +42,7 @@ class TestTableFormatValidation:
             "id": "test_format",
             "name": "Test Format",
             "columns": [],
-            "delimiter": ";"
+            "delimiter": ";",
         }
         with pytest.raises(ValidationError):
             TableFormat(**invalid_data)
@@ -53,10 +52,8 @@ class TestTableFormatValidation:
         data = {
             "id": "test_format",
             "name": "Test Format",
-            "columns": [
-                {"name": "col1", "type": "str", "required": True}
-            ],
-            "delimiter": ";"
+            "columns": [{"name": "col1", "type": "str", "required": True}],
+            "delimiter": ";",
         }
         table_format = TableFormat(**data)
         assert table_format.encoding == "utf-8"
@@ -71,7 +68,7 @@ class TestOptimizationRuleValidation:
             "name": "test_rule",
             "min_spacing": 5.0,
             "max_cuts": 50,
-            "material_types": ["MDF", "LDPE"]
+            "material_types": ["MDF", "LDPE"],
         }
         rule = OptimizationRule(**valid_data)
         assert rule.name == "test_rule"
@@ -84,7 +81,7 @@ class TestOptimizationRuleValidation:
             "name": "test_rule",
             "min_spacing": -1.0,
             "max_cuts": 50,
-            "material_types": ["MDF"]
+            "material_types": ["MDF"],
         }
         with pytest.raises(ValidationError):
             OptimizationRule(**invalid_data)
@@ -95,7 +92,7 @@ class TestOptimizationRuleValidation:
             "name": "test_rule",
             "min_spacing": 5.0,
             "max_cuts": 0,
-            "material_types": ["MDF"]
+            "material_types": ["MDF"],
         }
         with pytest.raises(ValidationError):
             OptimizationRule(**invalid_data)
@@ -106,7 +103,7 @@ class TestOptimizationRuleValidation:
             "name": "test_rule",
             "min_spacing": 5.0,
             "max_cuts": 50,
-            "material_types": []
+            "material_types": [],
         }
         with pytest.raises(ValidationError):
             OptimizationRule(**invalid_data)
@@ -118,7 +115,7 @@ class TestOptimizationRuleValidation:
             "min_spacing": 5.0,
             "max_cuts": 50,
             "material_types": ["MDF"],
-            "priority": 5
+            "priority": 5,
         }
         rule = OptimizationRule(**data)
         assert rule.priority == 5
@@ -129,10 +126,7 @@ class TestConfigManagerValidation:
 
     def test_valid_config_manager(self):
         """Тест валидного менеджера конфигурации."""
-        valid_data = {
-            "table_format_id": "standard_table",
-            "debug_mode": True
-        }
+        valid_data = {"table_format_id": "standard_table", "debug_mode": True}
         config = ConfigManager(**valid_data)
         assert config.table_format_id == "standard_table"
         assert config.debug_mode is True
@@ -140,18 +134,12 @@ class TestConfigManagerValidation:
 
     def test_invalid_empty_table_format_id(self):
         """Тест невалидного пустого table_format_id."""
-        invalid_data = {
-            "table_format_id": "",
-            "debug_mode": False
-        }
+        invalid_data = {"table_format_id": "", "debug_mode": False}
         with pytest.raises(ValidationError):
             ConfigManager(**invalid_data)
 
     def test_whitespace_stripping(self):
         """Тест удаления пробелов из ID."""
-        data = {
-            "table_format_id": "  test_format  ",
-            "debug_mode": False
-        }
+        data = {"table_format_id": "  test_format  ", "debug_mode": False}
         config = ConfigManager(**data)
-        assert config.table_format_id == "test_format" 
+        assert config.table_format_id == "test_format"

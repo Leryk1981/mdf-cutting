@@ -5,15 +5,14 @@
 для создания профессионального и консистентного интерфейса.
 """
 
-import tkinter as tk
-from tkinter import ttk, messagebox
-from typing import Dict, Any, Optional, List
-import threading
 import queue
+import threading
+import tkinter as tk
 from datetime import datetime
+from tkinter import ttk
+from typing import Any, Dict, List, Optional
 
 from ...integration.ai_integration_service import AIIntegrationService
-from ...integration.feedback_collector import FeedbackCollector
 from ..desktop_app import DesktopApp
 from .styles import AIStyles
 from .toast_notification import ToastNotification
@@ -441,7 +440,7 @@ class ImprovedAIControlPanel(ttk.Frame):
             result = self.ai_service.process_cutting_job(order_data)
 
             # Отправка результатов в основной поток
-            self.send_message("log", f"Оптимизация завершена", "success")
+            self.send_message("log", "Оптимизация завершена", "success")
             self.send_message(
                 "status_bar",
                 f"Готово. Уверенность: {result.get('ai_confidence', 0):.2f}",

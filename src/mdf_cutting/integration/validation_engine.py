@@ -9,7 +9,7 @@
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -78,9 +78,9 @@ class ValidationEngine:
             for field in required_fields:
                 if field not in correction:
                     validation_result["is_valid"] = False
-                    validation_result[
-                        "reason"
-                    ] = f"Missing required field: {field}"
+                    validation_result["reason"] = (
+                        f"Missing required field: {field}"
+                    )
                     return validation_result
 
             # 2. Валидация параметров корректировки
@@ -101,9 +101,9 @@ class ValidationEngine:
                 )
             else:
                 validation_result["is_valid"] = False
-                validation_result[
-                    "reason"
-                ] = f"Unknown correction type: {correction_type}"
+                validation_result["reason"] = (
+                    f"Unknown correction type: {correction_type}"
+                )
 
             # 3. Проверка технологических ограничений
             if validation_result["is_valid"]:
@@ -118,9 +118,9 @@ class ValidationEngine:
                 )
 
             # 5. Расчет оценки уверенности
-            validation_result[
-                "confidence_score"
-            ] = self._calculate_validation_confidence(validation_result)
+            validation_result["confidence_score"] = (
+                self._calculate_validation_confidence(validation_result)
+            )
 
         except Exception as e:
             validation_result["is_valid"] = False
@@ -148,9 +148,9 @@ class ValidationEngine:
                 or abs(dy) > self.max_position_offset * 2
             ):
                 validation_result["is_valid"] = False
-                validation_result[
-                    "reason"
-                ] = "Position offset exceeds maximum allowed"
+                validation_result["reason"] = (
+                    "Position offset exceeds maximum allowed"
+                )
 
         # Проверка на минимальное смещение
         if abs(dx) < 1.0 and abs(dy) < 1.0:
@@ -173,9 +173,9 @@ class ValidationEngine:
             )
             if abs(rotation) > 180:
                 validation_result["is_valid"] = False
-                validation_result[
-                    "reason"
-                ] = "Rotation angle exceeds maximum allowed"
+                validation_result["reason"] = (
+                    "Rotation angle exceeds maximum allowed"
+                )
 
         # Проверка на минимальный угол
         if abs(rotation) < 1.0:
@@ -195,9 +195,9 @@ class ValidationEngine:
         # Проверка на уменьшение деталей (недопустимо)
         if scale_x < self.min_scale_factor or scale_y < self.min_scale_factor:
             validation_result["is_valid"] = False
-            validation_result[
-                "reason"
-            ] = f"Scale must not reduce piece size below {self.min_scale_factor * 100}%"
+            validation_result["reason"] = (
+                f"Scale must not reduce piece size below {self.min_scale_factor * 100}%"
+            )
 
         # Проверка на увеличение (ограничено материалом)
         max_scale = self.material_constraints.get(
@@ -205,13 +205,13 @@ class ValidationEngine:
         )
         if scale_x > max_scale or scale_y > max_scale:
             validation_result["warnings"].append(
-                f"Scale increase exceeds material constraints"
+                "Scale increase exceeds material constraints"
             )
             if scale_x > 1.2 or scale_y > 1.2:
                 validation_result["is_valid"] = False
-                validation_result[
-                    "reason"
-                ] = "Scale exceeds maximum material constraints"
+                validation_result["reason"] = (
+                    "Scale exceeds maximum material constraints"
+                )
 
         # Проверка на пропорциональность
         scale_ratio = scale_x / scale_y if scale_y != 0 else 1.0
@@ -255,9 +255,9 @@ class ValidationEngine:
         )
         if material_violation:
             validation_result["is_valid"] = False
-            validation_result[
-                "reason"
-            ] = "Correction violates material constraints"
+            validation_result["reason"] = (
+                "Correction violates material constraints"
+            )
 
         # 4. Проверка производственных возможностей
         production_violation = self._check_production_constraints(
@@ -282,9 +282,9 @@ class ValidationEngine:
         )
         if boundary_violation:
             validation_result["is_valid"] = False
-            validation_result[
-                "reason"
-            ] = "Correction would place piece outside sheet boundaries"
+            validation_result["reason"] = (
+                "Correction would place piece outside sheet boundaries"
+            )
 
         # Проверка на пересечения с другими деталями
         intersection_violation = self._check_intersection_violation(
@@ -478,7 +478,7 @@ class ValidationEngine:
                 for line in f:
                     try:
                         rejected_suggestions.append(json.loads(line.strip()))
-                    except:
+                    except Exception:
                         continue
 
             # Статистика

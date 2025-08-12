@@ -4,10 +4,8 @@
 Адаптация системы уведомлений из веб-интерфейса для tkinter.
 """
 
-import threading
 import time
 import tkinter as tk
-from tkinter import ttk
 
 from .styles import AIStyles
 

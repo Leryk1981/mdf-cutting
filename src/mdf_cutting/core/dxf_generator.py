@@ -1,6 +1,8 @@
 import os.path
 from typing import Dict
 
+import ezdxf
+
 from ..utils.config import logger
 
 
@@ -406,13 +408,13 @@ def add_layout_filename_title(msp, sheet_length, sheet_width, filename):
                 # Используем явные атрибуты выравнивания
                 text_entity.dxf.halign = 2  # По правому краю
                 text_entity.dxf.valign = 3  # По верху
-            except:
+            except Exception:
                 # Если не поддерживается, используем метод set_pos
                 try:
                     text_entity.set_pos(
                         (sheet_length, sheet_width), align="TOP_RIGHT"
                     )
-                except:
+                except Exception:
                     # Если и это не работает, делаем приближение вручную
                     # Оценим длину текста (примерно 40 пикселей на символ при высоте 60)
                     text_width = len(base_filename) * 40
@@ -446,7 +448,6 @@ def add_details_list(msp, sheet_width, details_list, filename=None):
     try:
         # Высота строки и отступ (40 + 40 = 80)
         line_height = 80
-        start_y = 0  # Начинаем от нулевой координаты
         line_index = 0  # Индекс строки
 
         # Добавляем имя файла как первый пункт с увеличенной высотой
@@ -512,7 +513,7 @@ def create_new_dxf():
     Returns:
         tuple: (doc, msp) - DXF документ и modelspace
     """
-    doc = new()
+    doc = ezdxf.new()
     msp = doc.modelspace()
 
     # Стандартные слои

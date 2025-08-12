@@ -1,5 +1,3 @@
-import os
-import sys
 import tkinter as tk
 
 from packer.config import setup_logging
@@ -13,7 +11,7 @@ def main():
 
     # Запускаем интерфейс
     root = tk.Tk()
-    app = CuttingAppGUI(root)
+    CuttingAppGUI(root)
     root.mainloop()
 
 

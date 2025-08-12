@@ -2,10 +2,13 @@
 Тесты для загрузчика конфигурации.
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
+
+pytest.importorskip("torch")
+
 from src.mdf_cutting.config.loader import ConfigLoader
-from src.mdf_cutting.config import TableFormat, OptimizationRule
 
 
 class TestConfigLoader:
@@ -13,7 +16,12 @@ class TestConfigLoader:
 
     def setup_method(self):
         """Настройка перед каждым тестом."""
-        self.config_dir = Path(__file__).parent.parent.parent / "src" / "mdf_cutting" / "config"
+        self.config_dir = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "mdf_cutting"
+            / "config"
+        )
         self.loader = ConfigLoader(self.config_dir)
 
     def test_load_all_configs(self):
@@ -30,7 +38,7 @@ class TestConfigLoader:
         assert table_format is not None
         assert table_format.id == "standard_table"
         assert len(table_format.columns) > 0
-        
+
         # Проверяем что формат таблиц не изменен
         expected_columns = ["material_code", "length", "width", "quantity"]
         actual_columns = [col.name for col in table_format.columns]
@@ -69,7 +77,7 @@ class TestConfigLoader:
         """Тест перезагрузки конфигурации."""
         self.loader.load_all()
         initial_configs = len(self.loader._configs)
-        
+
         self.loader.reload()
         assert len(self.loader._configs) == initial_configs
         assert self.loader._loaded is True
@@ -78,11 +86,11 @@ class TestConfigLoader:
         """Тест обработки несуществующей директории."""
         invalid_dir = Path("/nonexistent/path")
         loader = ConfigLoader(invalid_dir)
-        
+
         with pytest.raises(RuntimeError):
             loader.load_all()
 
     def test_missing_table_format(self):
         """Тест получения несуществующего формата таблицы."""
         table_format = self.loader.get_table_format("nonexistent_format")
-        assert table_format is None 
+        assert table_format is None

@@ -10,10 +10,10 @@
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
-
-import numpy as np
+from unittest.mock import Mock, patch
 import pytest
+
+pytest.importorskip("torch")
 
 from src.mdf_cutting.ai_module.api.correction_api import CorrectionAPI
 from src.mdf_cutting.integration.ai_integration_service import (
@@ -460,7 +460,7 @@ class TestFeedbackCollector:
         """Тест сбора обратной связи с отсутствующими полями."""
         feedback_data = {
             "accepted_corrections": [],
-            "rejected_corrections": []
+            "rejected_corrections": [],
             # Отсутствует job_id и satisfaction_rating
         }
 

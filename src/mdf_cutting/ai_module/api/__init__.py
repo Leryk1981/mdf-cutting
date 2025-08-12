@@ -8,6 +8,4 @@ API для интеграции AI-модуля.
 
 from .correction_api import CorrectionAPI
 
-__all__ = [
-    "CorrectionAPI"
-] 
+__all__ = ["CorrectionAPI"]

@@ -1,10 +1,8 @@
-import glob
 import os
 import sys
 
 import pandas as pd
 
-from packer.constants import SUPPORTED_ENCODINGS
 from packer.test_packing import test_maxrects_blsf, test_various_algorithms
 from packer.utils import preprocess_dataframes, set_log_level
 
@@ -87,7 +85,7 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    print(f"Используемые пути:")
+    print("Используемые пути:")
     print(f"Файл деталей: {details_path}")
     print(f"Файл материалов: {materials_path}")
     print(f"Директория вывода: {output_dir}")
