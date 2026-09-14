@@ -113,6 +113,8 @@ class OperatorReviewDialog:
         self.canvas.bind("<ButtonPress-1>", self._press)
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._release)
+        self.canvas.bind("<Motion>", self._transfer_preview)
+        self.window.bind("<Escape>", self._cancel_transfer)
 
         right = ttk.Frame(body, width=270, padding=(10, 0, 0, 0))
         body.add(right, weight=0)
@@ -127,7 +129,8 @@ class OperatorReviewDialog:
         self.detail_label.pack(fill="x")
         self._button(right, "Повернуть на 90°", self._rotate)
         self._button(right, "Закрепить / снять", self._toggle_lock)
-        self._button(right, "Перенести на другую карту", self._start_transfer)
+        self.transfer_button = self._button(
+            right, "Перенести на другую карту", self._start_transfer)
         self._button(right, "Отменить действие", self._undo)
         self._button(right, "Вернуть исходный раскрой", self._reset)
         ttk.Separator(right).pack(fill="x", pady=10)
@@ -162,6 +165,7 @@ class OperatorReviewDialog:
     def _button(parent, text, command):
         button = ttk.Button(parent, text=text, command=command)
         button.pack(fill="x", pady=3)
+        return button
 
     def _current_layout(self):
         if not self.layouts:
@@ -179,6 +183,17 @@ class OperatorReviewDialog:
             self.layout_list.insert(
                 "end", f"{index + 1}. {kind} · {utilization:.0%} · "
                        f"{len(layout.placements)} дет.")
+            if self.transfer_id is not None:
+                source_layout, _placement = self._find_placement(
+                    self.transfer_id)
+                compatible = (
+                    source_layout is not None
+                    and source_layout.material_key == layout.material_key
+                )
+                self.layout_list.itemconfig(
+                    index,
+                    foreground="#176b2c" if compatible else "#888888",
+                )
             if layout.layout_id == current_id:
                 self.current_index = index
         if self.layouts:
@@ -192,6 +207,16 @@ class OperatorReviewDialog:
         self.current_index = selection[0]
         if self.transfer_id is None:
             self.selected_id = None
+        else:
+            source_layout, _placement = self._find_placement(self.transfer_id)
+            target_layout = self._current_layout()
+            if source_layout.material_key == target_layout.material_key:
+                self._status(
+                    "Шаг 3 из 3: щёлкните по свободному месту на выбранной карте.")
+            else:
+                self._status(
+                    "Эта карта имеет другой материал или толщину. "
+                    "Выберите зелёную строку.", True)
         self._render()
 
     def _render(self):
@@ -311,13 +336,14 @@ class OperatorReviewDialog:
         except ValueError as error:
             self._status(str(error), True)
             self._render()
-            return
+            return False
         self._save_undo()
         self.layouts = edited
         self.dirty = self.layouts != self.original_layouts
         self._refresh_navigation()
         self._render()
         self._status(f"Деталь перемещена в {x:g}; {y:g} мм.")
+        return True
 
     def _rotate(self):
         if not self._editable_selection():
@@ -356,10 +382,49 @@ class OperatorReviewDialog:
         return True
 
     def _start_transfer(self):
+        if self.transfer_id is not None:
+            self._cancel_transfer()
+            return
         if not self._editable_selection():
             return
         self.transfer_id = self.selected_id
-        self._status("Выберите карту слева и щёлкните по свободному месту.")
+        self.transfer_button.configure(text="Отменить перенос (Esc)")
+        self.canvas.configure(cursor="crosshair")
+        self._refresh_navigation()
+        self._status(
+            "Шаг 2 из 3: выберите зелёную совместимую карту слева. "
+            "Затем щёлкните по свободному месту.")
+
+    def _cancel_transfer(self, _event=None):
+        self.transfer_id = None
+        self.transfer_button.configure(text="Перенести на другую карту")
+        self.canvas.configure(cursor="arrow")
+        self._refresh_navigation()
+        self._render()
+        self._status("Перенос отменён.")
+
+    def _transfer_preview(self, event):
+        if self.transfer_id is None:
+            return
+        _source_layout, placement = self._find_placement(self.transfer_id)
+        model_x, model_y = self._to_model(event.x, event.y)
+        x = round(model_x - placement.width / 2)
+        y = round(model_y - placement.height / 2)
+        x, y = snap_placement(
+            self.layouts, self.transfer_id,
+            self._current_layout().layout_id, x, y)
+        preview = replace(placement, x=x, y=y)
+        try:
+            move_placement(
+                self.layouts, self.transfer_id,
+                self._current_layout().layout_id, x, y)
+            color = "#2a9d3f"
+        except ValueError:
+            color = "#ef233c"
+        self._render()
+        self.canvas.create_rectangle(
+            *self._canvas_coordinates(preview), outline=color,
+            width=4, dash=(7, 3))
 
     def _finish_transfer(self, event):
         placement_id = self.transfer_id
@@ -369,9 +434,17 @@ class OperatorReviewDialog:
         y = round(model_y - placement.height / 2)
         x, y = snap_placement(
             self.layouts, placement_id, self._current_layout().layout_id, x, y)
-        self.transfer_id = None
-        self._apply_move(
+        moved = self._apply_move(
             placement_id, self._current_layout().layout_id, x, y)
+        if moved:
+            self.transfer_id = None
+            self.transfer_button.configure(text="Перенести на другую карту")
+            self.canvas.configure(cursor="arrow")
+            self._refresh_navigation()
+            self._render()
+        else:
+            self._status(
+                "Место занято. Выберите другую точку или нажмите Esc.", True)
 
     def _auto_repack(self):
         proposal = repack_unlocked(self.layouts, self.locked_ids)
@@ -400,7 +473,8 @@ class OperatorReviewDialog:
         self.layouts = self.undo_stack.pop()
         self.current_index = min(self.current_index, len(self.layouts) - 1)
         self.selected_id = None
-        self.transfer_id = None
+        if self.transfer_id is not None:
+            self._cancel_transfer()
         self.dirty = self.layouts != self.original_layouts
         self._refresh_navigation()
         self._render()
@@ -412,7 +486,8 @@ class OperatorReviewDialog:
         self.layouts = self.original_layouts
         self.current_index = 0
         self.selected_id = None
-        self.transfer_id = None
+        if self.transfer_id is not None:
+            self._cancel_transfer()
         self.locked_ids.clear()
         self.dirty = False
         self._refresh_navigation()

@@ -211,7 +211,7 @@ def snap_placement(
 
 
 def rotate_placement(layouts, placement_id):
-    """Rotate one placement by 90 degrees around its current center."""
+    """Rotate and find the nearest valid aligned position on the same layout."""
     for layout in layouts:
         for placement in layout.placements:
             if placement.placement_id != placement_id:
@@ -220,13 +220,15 @@ def rotate_placement(layouts, placement_id):
             center_y = placement.y + placement.height / 2
             rotated = replace(
                 placement,
-                x=center_x - placement.height / 2,
-                y=center_y - placement.width / 2,
                 width=placement.height,
                 height=placement.width,
                 rotated=not placement.rotated,
             )
-            temporary = tuple(
+            center_position = (
+                center_x - rotated.width / 2,
+                center_y - rotated.height / 2,
+            )
+            rotated_layouts = tuple(
                 replace(
                     candidate_layout,
                     placements=tuple(
@@ -237,13 +239,61 @@ def rotate_placement(layouts, placement_id):
                 else candidate_layout
                 for candidate_layout in layouts
             )
-            return move_placement(
-                temporary,
-                placement_id,
-                layout.layout_id,
-                rotated.x,
-                rotated.y,
+            x_candidates = {
+                center_position[0],
+                placement.x,
+                placement.x + placement.width - rotated.width,
+                min(max(center_position[0], 0), layout.width - rotated.width),
+                0,
+                layout.width - rotated.width,
+            }
+            y_candidates = {
+                center_position[1],
+                placement.y,
+                placement.y + placement.height - rotated.height,
+                min(max(center_position[1], 0), layout.height - rotated.height),
+                0,
+                layout.height - rotated.height,
+            }
+            for other in layout.placements:
+                if other.placement_id == placement_id:
+                    continue
+                x_candidates.update({
+                    other.x - rotated.width,
+                    other.x + other.width,
+                })
+                y_candidates.update({
+                    other.y - rotated.height,
+                    other.y + other.height,
+                })
+            positions = sorted(
+                ((x, y) for x in x_candidates for y in y_candidates),
+                key=lambda point: (
+                    abs(point[0] - center_position[0])
+                    + abs(point[1] - center_position[1]),
+                    abs(point[0] - center_position[0]),
+                ),
             )
+            for x, y in positions:
+                snapped_x, snapped_y = snap_placement(
+                    rotated_layouts,
+                    placement_id,
+                    layout.layout_id,
+                    x,
+                    y,
+                )
+                try:
+                    return move_placement(
+                        rotated_layouts,
+                        placement_id,
+                        layout.layout_id,
+                        snapped_x,
+                        snapped_y,
+                    )
+                except ValueError:
+                    continue
+            raise ValueError(
+                "После поворота нет свободного места для детали на этой карте")
     raise ValueError(f"Не найдена деталь {placement_id}")
 
 

@@ -97,6 +97,21 @@ class LayoutReviewTests(unittest.TestCase):
         self.assertEqual((placement.width, placement.height), (20, 60))
         self.assertTrue(placement.rotated)
 
+    def test_rotation_finds_nearby_valid_position_when_center_does_not_fit(self):
+        layouts = (LayoutSnapshot(
+            "sheet-1", 100, 100,
+            (
+                Placement("A", 0, 0, 60, 20),
+                Placement("B", 20, 20, 40, 40),
+            ),
+        ),)
+
+        rotated = rotate_placement(layouts, "A")
+        placement = rotated[0].placements[0]
+
+        self.assertEqual((placement.width, placement.height), (20, 60))
+        self.assertEqual((placement.x, placement.y), (0, 0))
+
     def test_repack_can_free_the_last_sheet(self):
         layouts = (
             LayoutSnapshot(
