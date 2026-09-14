@@ -18,6 +18,7 @@ from packer.operator_review import (
     finalize_materials_draft,
 )
 from packer.packing import pack_and_generate_dxf
+from packer.review_dialog import OperatorReviewDialog
 from packer.utils import (
     set_log_level,
     read_csv_files,
@@ -426,9 +427,12 @@ class CuttingAppGUI:
             self.root.after(
                 0,
                 lambda: self._review_cutting_result(
-                    layout_count,
-                    total_used_sheets,
+                    packing_result,
                     remnant_count,
+                    details_df,
+                    materials_df,
+                    int(margin),
+                    int(kerf),
                     draft_materials_path,
                     published_materials_path,
                     output_dir,
@@ -455,23 +459,30 @@ class CuttingAppGUI:
         self.status_label.config(text="Готов к запуску")
 
     def _review_cutting_result(
-            self, layout_count, total_used_sheets, remnant_count,
-            draft_materials_path, published_materials_path, output_dir):
+            self, packing_result, remnant_count, details_df, materials_df,
+            margin, kerf, draft_materials_path, published_materials_path,
+            output_dir):
         """Запрашивает утверждение до публикации складской таблицы."""
-        approved = messagebox.askyesno(
-            "Проверка результата раскроя",
-            f"Создано карт раскроя: {layout_count}\n"
-            f"Использовано целых листов: {total_used_sheets}\n"
-            f"Остатков в рассчитанном складе: {remnant_count}\n\n"
-            "Проверьте карты раскроя перед передачей в производство.\n"
-            "Утвердить результат и обновить таблицу материалов?",
+        dialog = OperatorReviewDialog(
+            self.root,
+            packing_result,
+            details_df,
+            materials_df,
+            output_dir,
+            draft_materials_path,
+            margin,
+            kerf,
+            remnant_count,
         )
+        decision = dialog.show()
 
         try:
+            final_remnant_count = count_material_remnants(
+                draft_materials_path)
             result_path = finalize_materials_draft(
                 draft_materials_path,
                 published_materials_path,
-                approved,
+                decision.approved,
             )
         except Exception as error:
             logger.exception("Не удалось утвердить таблицу материалов")
@@ -481,11 +492,21 @@ class CuttingAppGUI:
             )
             return
 
-        if approved:
+        if decision.approved:
+            variant = (
+                "улучшенный" if decision.candidate_applied else "исходный")
+            backup_text = ""
+            if decision.backup_dir is not None:
+                backup_text = (
+                    f"\nРезервная копия исходных DXF:\n"
+                    f"{decision.backup_dir}\n")
             messagebox.showinfo(
                 "Результат утверждён",
+                f"Утверждён {variant} вариант.\n"
                 f"Таблица материалов обновлена:\n{result_path}\n\n"
-                f"Файлы раскроя: {output_dir}",
+                f"Файлы раскроя: {output_dir}"
+                f"{backup_text}\n"
+                f"Остатков после утверждения: {final_remnant_count}",
             )
         else:
             messagebox.showinfo(

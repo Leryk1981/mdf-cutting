@@ -7,11 +7,55 @@ import pandas as pd
 from packer.layout_review import LayoutSnapshot, Placement
 from packer.review_candidate import (
     build_material_ledger,
+    publish_candidate_outputs,
     render_candidate_dxf,
 )
 
 
 class ReviewCandidateTests(unittest.TestCase):
+    def test_publish_candidate_replaces_only_reviewed_outputs_and_keeps_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_dir = root / "candidate"
+            candidate_dir.mkdir()
+            first = root / "sheet_1.dxf"
+            freed = root / "sheet_2.dxf"
+            pending = root / "updated_materials.pending.csv"
+            first.write_text("original one", encoding="utf-8")
+            freed.write_text("original two", encoding="utf-8")
+            pending.write_text("original ledger", encoding="utf-8")
+            (candidate_dir / first.name).write_text(
+                "candidate one", encoding="utf-8")
+            candidate_ledger = candidate_dir / pending.name
+            candidate_ledger.write_text("candidate ledger", encoding="utf-8")
+            original_layouts = (
+                LayoutSnapshot("one", 1, 1, (), output_file=str(first)),
+                LayoutSnapshot("two", 1, 1, (), output_file=str(freed)),
+            )
+            candidate_layouts = (
+                LayoutSnapshot("one", 1, 1, (), output_file=str(first)),
+            )
+
+            backup_dir = publish_candidate_outputs(
+                original_layouts,
+                candidate_layouts,
+                candidate_dir,
+                candidate_ledger,
+                pending,
+            )
+
+            self.assertEqual(first.read_text(encoding="utf-8"), "candidate one")
+            self.assertFalse(freed.exists())
+            self.assertEqual(pending.read_text(encoding="utf-8"), "candidate ledger")
+            self.assertEqual(
+                (backup_dir / first.name).read_text(encoding="utf-8"),
+                "original one",
+            )
+            self.assertEqual(
+                (backup_dir / freed.name).read_text(encoding="utf-8"),
+                "original two",
+            )
+
     def test_candidate_ledger_consumes_exact_selected_containers(self):
         materials = pd.DataFrame([
             {

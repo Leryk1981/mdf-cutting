@@ -1,5 +1,6 @@
 """Generate isolated DXF and material-ledger outputs for a review proposal."""
 
+import os
 from pathlib import Path
 
 from .dxf_generator import (
@@ -175,3 +176,65 @@ def write_candidate_outputs(
     RemnantsManager(margin=margin, kerf=kerf).save_material_table(
         materials, materials_path)
     return dxf_paths, materials_path
+
+
+def publish_candidate_outputs(
+        original_layouts, candidate_layouts, candidate_dir,
+        candidate_materials_path, pending_materials_path):
+    """Publish an approved candidate while retaining recoverable originals."""
+    candidate_dir = Path(candidate_dir)
+    pending_materials_path = Path(pending_materials_path)
+    backup_dir = candidate_dir / "original_outputs"
+    backup_dir.mkdir(parents=True, exist_ok=False)
+
+    original_paths = {
+        Path(layout.output_file) for layout in original_layouts
+    }
+    candidate_targets = {
+        Path(layout.output_file) for layout in candidate_layouts
+    }
+    candidate_sources = {
+        target: candidate_dir / target.name for target in candidate_targets
+    }
+    missing = [
+        str(source) for source in candidate_sources.values()
+        if not source.is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            f"Не найдены DXF улучшенного варианта: {', '.join(missing)}")
+    candidate_materials_path = Path(candidate_materials_path)
+    if not candidate_materials_path.is_file():
+        raise FileNotFoundError(
+            f"Не найдена таблица улучшенного варианта: {candidate_materials_path}")
+
+    moved_originals = []
+    published_candidates = []
+    ledger_backup = backup_dir / pending_materials_path.name
+    try:
+        for original_path in original_paths:
+            if original_path.is_file():
+                backup_path = backup_dir / original_path.name
+                os.replace(original_path, backup_path)
+                moved_originals.append((backup_path, original_path))
+
+        for target, source in candidate_sources.items():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(source, target)
+            published_candidates.append((target, source))
+
+        if pending_materials_path.is_file():
+            os.replace(pending_materials_path, ledger_backup)
+        os.replace(candidate_materials_path, pending_materials_path)
+    except Exception:
+        for target, source in reversed(published_candidates):
+            if target.is_file():
+                os.replace(target, source)
+        for backup_path, original_path in reversed(moved_originals):
+            if backup_path.is_file():
+                os.replace(backup_path, original_path)
+        if ledger_backup.is_file() and not pending_materials_path.is_file():
+            os.replace(ledger_backup, pending_materials_path)
+        raise
+
+    return backup_dir
