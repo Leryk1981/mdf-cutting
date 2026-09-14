@@ -44,6 +44,7 @@ class OperatorReviewDialog:
         self.original_layouts = tuple(packing_result.layouts)
         self.layouts = self.original_layouts
         self.locked_ids = set()
+        self.manual_ids = set()
         self.undo_stack = []
         self.current_index = 0
         self.selected_id = None
@@ -268,6 +269,8 @@ class OperatorReviewDialog:
                 fill, outline, line = "#ffbf69", "#c95700", 3
             elif placement.placement_id in self.locked_ids:
                 fill, outline, line = "#9ad5a5", "#287a3b", 3
+            elif placement.placement_id in self.manual_ids:
+                fill, outline, line = "#c9b6e4", "#6941a5", 3
             else:
                 fill, outline, line = "#8ecae6", "#26779a", 1
             rectangle = self.canvas.create_rectangle(
@@ -362,12 +365,12 @@ class OperatorReviewDialog:
             return False
         self._save_undo()
         self.layouts = edited
-        self.locked_ids.add(placement_id)
+        self.manual_ids.add(placement_id)
         self.dirty = self.layouts != self.original_layouts
         self._refresh_navigation()
         self._render()
         self._status(
-            f"Деталь перемещена в {x:g}; {y:g} мм и автоматически закреплена.")
+            f"Деталь перемещена в {x:g}; {y:g} мм. Ручная позиция сохранена.")
         return True
 
     def _rotate(self):
@@ -378,20 +381,29 @@ class OperatorReviewDialog:
         except ValueError as error:
             self._status(str(error), True)
             return
+        _before_layout, before = self._find_placement(self.selected_id)
         self._save_undo()
         self.layouts = edited
-        self.locked_ids.add(self.selected_id)
+        self.manual_ids.add(self.selected_id)
         self.dirty = True
         self._render()
         self._update_metrics()
-        self._status("Деталь повёрнута на 90° и автоматически закреплена.")
+        _after_layout, after = self._find_placement(self.selected_id)
+        self._status(
+            f"Поворот выполнен: {before.width:g}×{before.height:g} → "
+            f"{after.width:g}×{after.height:g} мм; позиция "
+            f"{after.x:g}; {after.y:g}.")
 
     def _toggle_lock(self):
         if self.selected_id is None:
             self._status("Сначала выберите деталь.", True)
             return
-        if self.selected_id in self.locked_ids:
-            self.locked_ids.remove(self.selected_id)
+        if (
+            self.selected_id in self.locked_ids
+            or self.selected_id in self.manual_ids
+        ):
+            self.locked_ids.discard(self.selected_id)
+            self.manual_ids.discard(self.selected_id)
             self._status("Фиксация снята.")
         else:
             self.locked_ids.add(self.selected_id)
@@ -474,7 +486,7 @@ class OperatorReviewDialog:
             return
         self._save_undo()
         self.layouts = edited
-        self.locked_ids.add(placement_id)
+        self.manual_ids.add(placement_id)
         self.dirty = self.layouts != self.original_layouts
         self.selected_id = placement_id
         if edited:
@@ -485,11 +497,12 @@ class OperatorReviewDialog:
             self._render()
             rotation_text = " с автоматическим поворотом" if was_rotated else ""
             self._status(
-                f"Деталь перенесена{rotation_text} и закреплена. "
+                f"Деталь перенесена{rotation_text}; ручная позиция сохранена. "
                 "Повторно запускать раскрой не нужно.")
 
     def _auto_repack(self):
-        proposal = repack_unlocked(self.layouts, self.locked_ids)
+        proposal = repack_unlocked(
+            self.layouts, self.locked_ids | self.manual_ids)
         if not proposal.feasible:
             self._status(proposal.reason, True)
             return
@@ -514,14 +527,21 @@ class OperatorReviewDialog:
             f"{len(proposal.freed_layout_ids)}.")
 
     def _save_undo(self):
-        self.undo_stack.append(self.layouts)
+        self.undo_stack.append((
+            self.layouts,
+            frozenset(self.locked_ids),
+            frozenset(self.manual_ids),
+        ))
         self.undo_stack = self.undo_stack[-50:]
 
     def _undo(self):
         if not self.undo_stack:
             self._status("Нет действий для отмены.", True)
             return
-        self.layouts = self.undo_stack.pop()
+        layouts, locked_ids, manual_ids = self.undo_stack.pop()
+        self.layouts = layouts
+        self.locked_ids = set(locked_ids)
+        self.manual_ids = set(manual_ids)
         self.current_index = min(self.current_index, len(self.layouts) - 1)
         self.selected_id = None
         if self.transfer_id is not None:
@@ -540,6 +560,7 @@ class OperatorReviewDialog:
         if self.transfer_id is not None:
             self._cancel_transfer()
         self.locked_ids.clear()
+        self.manual_ids.clear()
         self.dirty = False
         self._refresh_navigation()
         self._render()
@@ -551,13 +572,18 @@ class OperatorReviewDialog:
             return
         _layout, placement = self._find_placement(self.selected_id)
         source = self.detail_sources[self.selected_id]
-        locked = "да" if self.selected_id in self.locked_ids else "нет"
+        if self.selected_id in self.locked_ids:
+            state = "закреплена оператором"
+        elif self.selected_id in self.manual_ids:
+            state = "ручная правка"
+        else:
+            state = "автоматическая"
         self.detail_label.configure(text=(
             f"Деталь: {source['part_id']}\nЗаказ: {source['order_id']}\n"
             f"Размер: {placement.width - self.kerf:g} × "
             f"{placement.height - self.kerf:g} мм\n"
             f"Координаты: {placement.x:g}; {placement.y:g}\n"
-            f"Закреплена: {locked}"))
+            f"Статус: {state}"))
 
     def _update_metrics(self):
         current = calculate_layout_metrics(self.layouts)

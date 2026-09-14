@@ -380,7 +380,21 @@ def rotate_placement(layouts, placement_id):
                     other.y - rotated.height,
                     other.y + other.height,
                 })
-            positions = sorted(
+            preferred_positions = [
+                (placement.x, placement.y),
+                center_position,
+                (placement.x + placement.width - rotated.width, placement.y),
+                (placement.x, placement.y + placement.height - rotated.height),
+                (
+                    placement.x + placement.width - rotated.width,
+                    placement.y + placement.height - rotated.height,
+                ),
+                (
+                    min(max(placement.x, 0), layout.width - rotated.width),
+                    min(max(placement.y, 0), layout.height - rotated.height),
+                ),
+            ]
+            remaining_positions = sorted(
                 ((x, y) for x in x_candidates for y in y_candidates),
                 key=lambda point: (
                     abs(point[0] - center_position[0])
@@ -388,6 +402,10 @@ def rotate_placement(layouts, placement_id):
                     abs(point[0] - center_position[0]),
                 ),
             )
+            positions = []
+            for position in preferred_positions + remaining_positions:
+                if position not in positions:
+                    positions.append(position)
             for x, y in positions:
                 snapped_x, snapped_y = snap_placement(
                     rotated_layouts,
@@ -396,16 +414,20 @@ def rotate_placement(layouts, placement_id):
                     x,
                     y,
                 )
-                try:
-                    return move_placement(
-                        rotated_layouts,
-                        placement_id,
-                        layout.layout_id,
-                        snapped_x,
-                        snapped_y,
-                    )
-                except ValueError:
-                    continue
+                candidates = [(x, y)]
+                if (snapped_x, snapped_y) != (x, y):
+                    candidates.append((snapped_x, snapped_y))
+                for candidate_x, candidate_y in candidates:
+                    try:
+                        return move_placement(
+                            rotated_layouts,
+                            placement_id,
+                            layout.layout_id,
+                            candidate_x,
+                            candidate_y,
+                        )
+                    except ValueError:
+                        continue
             raise ValueError(
                 "После поворота нет свободного места для детали на этой карте")
     raise ValueError(f"Не найдена деталь {placement_id}")

@@ -119,7 +119,7 @@ class LayoutReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "материал"):
             move_placement(layouts, "A", "19-mm", 0, 0)
 
-    def test_rotation_uses_center_and_rejects_out_of_bounds(self):
+    def test_rotation_prefers_the_same_lower_left_position(self):
         layouts = (LayoutSnapshot(
             "sheet-1", 100, 100,
             (Placement("A", 10, 20, 60, 20),),
@@ -128,16 +128,16 @@ class LayoutReviewTests(unittest.TestCase):
         rotated = rotate_placement(layouts, "A")
         placement = rotated[0].placements[0]
 
-        self.assertEqual((placement.x, placement.y), (30, 0))
+        self.assertEqual((placement.x, placement.y), (10, 20))
         self.assertEqual((placement.width, placement.height), (20, 60))
         self.assertTrue(placement.rotated)
 
-    def test_rotation_finds_nearby_valid_position_when_center_does_not_fit(self):
+    def test_rotation_finds_nearby_valid_position_when_origin_is_blocked(self):
         layouts = (LayoutSnapshot(
             "sheet-1", 100, 100,
             (
                 Placement("A", 0, 0, 60, 20),
-                Placement("B", 20, 20, 40, 40),
+                Placement("B", 0, 20, 40, 40),
             ),
         ),)
 
@@ -145,7 +145,7 @@ class LayoutReviewTests(unittest.TestCase):
         placement = rotated[0].placements[0]
 
         self.assertEqual((placement.width, placement.height), (20, 60))
-        self.assertEqual((placement.x, placement.y), (0, 0))
+        self.assertNotEqual((placement.x, placement.y), (0, 0))
 
     def test_repack_can_free_the_last_sheet(self):
         layouts = (
