@@ -3,7 +3,9 @@ import unittest
 from packer.layout_review import (
     LayoutSnapshot,
     Placement,
+    configure_cut_plan,
     guillotine_remnant,
+    guillotine_remnants,
     move_placement,
     repack_unlocked,
     refresh_guillotine_cut,
@@ -36,7 +38,34 @@ class LayoutReviewTests(unittest.TestCase):
 
         self.assertEqual(edited[0].guillotine_cut.orientation, "vertical")
         self.assertEqual(edited[0].guillotine_cut.position, 1000)
-        self.assertEqual(guillotine_remnant(edited[0]), (1000, 200))
+        self.assertEqual(guillotine_remnant(edited[0]), (1000, 800))
+        self.assertEqual(
+            set(guillotine_remnants(edited[0])),
+            {(1000.0, 800.0), (1000.0, 200.0)},
+        )
+
+    def test_three_cut_plan_recovers_stepped_remnant(self):
+        layout = refresh_guillotine_cut(LayoutSnapshot(
+            "sheet-16-3", 2788, 2058,
+            (
+                Placement("93", 0, 0, 820, 1987),
+                Placement("2", 820, 0, 1952, 833),
+                Placement("57", 820, 833, 1954, 819),
+                Placement("14", 0, 1987, 2154, 49),
+            ),
+        ))
+
+        self.assertEqual(
+            [(cut.orientation, cut.position) for cut in layout.cut_plan.cuts],
+            [("horizontal", 1987), ("vertical", 820),
+             ("horizontal", 1652)],
+        )
+        self.assertEqual(guillotine_remnants(layout), ((1968.0, 335.0),))
+
+        reduced = configure_cut_plan(
+            (layout,), layout.layout_id, max_cuts=2)[0]
+        self.assertEqual(reduced.cut_plan.cuts, ())
+        self.assertEqual(reduced.cut_plan.remnants, ())
 
     def test_move_recalculates_cut_and_preserves_selected_direction(self):
         layout = refresh_guillotine_cut(LayoutSnapshot(

@@ -578,6 +578,56 @@ def add_guillotine_cut(msp, cut, margin):
     )
 
 
+def add_guillotine_plan(msp, plan, margin):
+    """Draw every ordered segment of a guillotine cut tree."""
+    if plan is None:
+        return ()
+    entities = []
+    for cut in plan.cuts:
+        if cut.orientation == "horizontal":
+            start = (
+                margin + cut.panel_x,
+                margin + cut.position,
+            )
+            end = (
+                margin + cut.panel_x + cut.panel_width,
+                margin + cut.position,
+            )
+        elif cut.orientation == "vertical":
+            start = (
+                margin + cut.position,
+                margin + cut.panel_y,
+            )
+            end = (
+                margin + cut.position,
+                margin + cut.panel_y + cut.panel_height,
+            )
+        else:
+            raise ValueError(
+                f"Неизвестное направление реза: {cut.orientation}")
+        line = msp.add_line(
+            start,
+            end,
+            dxfattribs={
+                "layer": "guillotine_cut",
+                "color": 6,
+                "linetype": "DASHED",
+                "ltscale": 20,
+            },
+        )
+        label = msp.add_text(
+            str(cut.order),
+            dxfattribs={
+                "layer": "guillotine_cut",
+                "color": 6,
+                "height": 24,
+            },
+        )
+        label.set_placement((start[0] + 6, start[1] + 6))
+        entities.extend((line, label))
+    return tuple(entities)
+
+
 def add_cut_line(msp, x, y, width, height, offset):
     """
     Добавляет линию реза со смещением от контура детали

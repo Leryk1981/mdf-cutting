@@ -9,7 +9,7 @@ from .dxf_generator import (
     create_new_dxf,
     add_sheet_outline,
     add_detail_to_sheet,
-    add_guillotine_cut,
+    add_guillotine_plan,
     add_layout_filename_title,
     add_details_list
 )
@@ -17,7 +17,7 @@ from .remnants import RemnantsManager
 from .layout_review import (
     LayoutSnapshot,
     Placement,
-    guillotine_remnant,
+    guillotine_remnants,
     refresh_guillotine_cut,
 )
 from .constants import (
@@ -531,8 +531,8 @@ def pack_and_generate_dxf(
                     material=material,
                 ))
 
-                add_guillotine_cut(
-                    msp, layout_snapshot.guillotine_cut, margin)
+                add_guillotine_plan(
+                    msp, layout_snapshot.cut_plan, margin)
 
                 # Добавляем заголовок
                 add_layout_filename_title(
@@ -570,12 +570,11 @@ def pack_and_generate_dxf(
                 layout.thickness == float(thickness)
                 and layout.material == material
             )
-            for remnant in [guillotine_remnant(
+            for remnant in guillotine_remnants(
                 layout,
                 remnants_manager.min_remnant_width,
                 remnants_manager.min_remnant_length,
-            )]
-            if remnant is not None
+            )
         ]
 
         # Устанавливаем финальный упаковщик для этой комбинации материал/толщина

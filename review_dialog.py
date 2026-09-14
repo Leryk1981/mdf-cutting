@@ -273,13 +273,13 @@ class OperatorReviewDialog:
             self.offset_x + layout.width * self.scale,
             self.offset_y + layout.height * self.scale,
             fill="white", outline="#30343b", width=2)
-        cut = layout.guillotine_cut
-        if cut is not None:
+        plan = layout.cut_plan
+        for remnant in plan.remnants:
             remnant = self._model_rectangle(
-                cut.remnant_x,
-                cut.remnant_y,
-                cut.remnant_width,
-                cut.remnant_height,
+                remnant.x,
+                remnant.y,
+                remnant.width,
+                remnant.height,
             )
             self.canvas.create_rectangle(
                 *remnant, fill="#e5f4e8", outline="")
@@ -307,15 +307,21 @@ class OperatorReviewDialog:
                     text=str(source["part_id"]), fill="#102a36",
                     font=("Segoe UI", 9, "bold"))
                 self.item_placements[label] = placement.placement_id
-        if cut is not None:
+        for cut in plan.cuts:
             if cut.orientation == "horizontal":
-                start = self._model_point(0, cut.position)
-                end = self._model_point(layout.width, cut.position)
+                start = self._model_point(cut.panel_x, cut.position)
+                end = self._model_point(
+                    cut.panel_x + cut.panel_width, cut.position)
             else:
-                start = self._model_point(cut.position, 0)
-                end = self._model_point(cut.position, layout.height)
+                start = self._model_point(cut.position, cut.panel_y)
+                end = self._model_point(
+                    cut.position, cut.panel_y + cut.panel_height)
             self.canvas.create_line(
                 *start, *end, fill="#9b2c86", width=3, dash=(10, 6))
+            self.canvas.create_text(
+                start[0] + 10, start[1] - 10,
+                text=str(cut.order), fill="#9b2c86",
+                font=("Segoe UI", 10, "bold"))
         self._update_detail()
         self._update_cut_info()
 
@@ -468,23 +474,11 @@ class OperatorReviewDialog:
         self.layouts = edited
         self.dirty = self.layouts != self.original_layouts
         self._render()
-        cut = self._current_layout().guillotine_cut
-        direction = (
-            "горизонтальный"
-            if cut.orientation == "horizontal"
-            else "вертикальный"
-        )
-        usable = (
-            min(cut.remnant_width, cut.remnant_height) >= 60
-            and max(cut.remnant_width, cut.remnant_height) >= 1000
-        )
-        result = (
-            "Остаток будет записан на склад."
-            if usable
-            else "Остаток слишком мал и на склад не попадёт."
-        )
+        plan = self._current_layout().cut_plan
         self._status(
-            f"Выбран {direction} гильотинный рез. {result}")
+            f"План перестроен: {len(plan.cuts)} резов, "
+            f"{len(plan.remnants)} складских остатков, "
+            f"{plan.area / 1_000_000:.3f} м².")
 
     def _editable_selection(self):
         if self.selected_id is None:
@@ -672,34 +666,24 @@ class OperatorReviewDialog:
 
     def _update_cut_info(self):
         layout = self._current_layout()
-        cut = layout.guillotine_cut if layout is not None else None
-        if cut is None:
-            self.cut_label.configure(text="Пригодного внешнего остатка нет.")
-            self.cut_button.configure(state="disabled")
+        plan = layout.cut_plan if layout is not None else None
+        if plan is None or not plan.cuts:
+            self.cut_label.configure(text="Полезный план резов не найден.")
+            self.cut_button.configure(state="normal" if layout else "disabled")
             return
-        direction = (
-            "Горизонтальный"
-            if cut.orientation == "horizontal"
-            else "Вертикальный"
+        first = plan.cuts[0]
+        alternative = "вертикальный" if first.orientation == "horizontal" else "горизонтальный"
+        sequence = "\n".join(
+            f"{cut.order}. {'горизонтальный' if cut.orientation == 'horizontal' else 'вертикальный'} "
+            f"@ {cut.position:g} мм"
+            for cut in plan.cuts
         )
-        alternative = (
-            "вертикальный"
-            if cut.orientation == "horizontal"
-            else "горизонтальный"
-        )
-        usable = (
-            min(cut.remnant_width, cut.remnant_height) >= 60
-            and max(cut.remnant_width, cut.remnant_height) >= 1000
-        )
-        stock_text = "будет записан на склад" if usable else "слишком мал для склада"
         self.cut_label.configure(text=(
-            f"{direction} рез: {cut.position:g} мм\n"
-            f"Остаток: {cut.remnant_width:g} × "
-            f"{cut.remnant_height:g} мм\n"
-            f"Площадь: {cut.area / 1_000_000:.3f} м² — {stock_text}."
+            f"Резов: {len(plan.cuts)}, остатков: {len(plan.remnants)}\n"
+            f"Площадь: {plan.area / 1_000_000:.3f} м²\n{sequence}"
         ))
         self.cut_button.configure(
-            text=f"Выбрать {alternative} рез", state="normal")
+            text=f"Первый рез: {alternative}", state="normal")
 
     def _stage(self):
         active = tuple(layout for layout in self.layouts if layout.placements)

@@ -62,13 +62,20 @@ function setSession(session, options = {}) {
 function openWorkspace(session, remember = false) {
   state.selectedId = null;
   state.transferMode = false;
+  const requestedMap = new URLSearchParams(location.search).get("map");
+  if (requestedMap) state.currentLayoutId = requestedMap;
   setSession(session, { resetZoom: true });
   byId("workspace").hidden = false;
   byId("setup-panel").classList.add("collapsed");
   byId("toggle-setup").textContent = "Развернуть";
-  if (remember) {
-    history.replaceState(null, "", `/?session=${session.session_id}`);
-  }
+  if (remember) rememberLocation();
+}
+
+function rememberLocation() {
+  if (!state.session) return;
+  const query = new URLSearchParams({ session: state.session.session_id });
+  if (state.currentLayoutId) query.set("map", state.currentLayoutId);
+  history.replaceState(null, "", `/?${query}`);
 }
 
 function renderAll(resetZoom = false) {
@@ -119,6 +126,7 @@ function renderMapList() {
     button.addEventListener("click", () => {
       state.currentLayoutId = layout.id;
       state.viewBox = null;
+      rememberLocation();
       renderAll(true);
       if (state.transferMode) toast("Щёлкните по свободному месту выбранной карты.");
     });
@@ -150,24 +158,32 @@ function renderProperties() {
   }
 
   const layout = currentLayout();
-  const cut = layout?.cut;
+  const plan = layout?.cut_plan;
   const cutInfo = byId("cut-info");
-  if (!cut) {
-    cutInfo.textContent = "Свободной внешней области нет.";
-    byId("cut-button").disabled = true;
-  } else {
-    const direction = cut.orientation === "horizontal" ? "Горизонтальный" : "Вертикальный";
+  if (!plan?.cut_count) {
     cutInfo.replaceChildren(
-      line(`${direction} рез: ${format(cut.position)} мм`),
-      line(`Остаток: ${format(cut.width)} × ${format(cut.height)} мм`),
-      line(`Площадь: ${cut.area_m2.toFixed(3)} м²`),
-      line(cut.usable ? "Будет записан на склад" : "Слишком мал для склада", !cut.usable),
+      line("Полезный план при выбранном лимите не найден.", true),
+      line(`Разрешено резов: ${plan?.max_cuts ?? 0}`),
     );
-    byId("cut-button").disabled = state.session.summary.approved;
-    byId("cut-button").textContent = cut.orientation === "horizontal"
-      ? "Выбрать вертикальный рез"
-      : "Выбрать горизонтальный рез";
+  } else {
+    const rows = [
+      line(`Резов: ${plan.cut_count} · остатков: ${plan.remnants.length}`),
+      line(`На склад: ${plan.area_m2.toFixed(3)} м²`),
+    ];
+    for (const cut of plan.cuts) {
+      const axis = cut.orientation === "horizontal" ? "Y" : "X";
+      const direction = cut.orientation === "horizontal" ? "горизонтальный" : "вертикальный";
+      rows.push(line(`${cut.order}. ${direction}, ${axis}=${format(cut.position)} мм`));
+    }
+    for (const [index, remnant] of plan.remnants.entries()) {
+      rows.push(line(`Остаток ${index + 1}: ${format(remnant.width)} × ${format(remnant.height)} мм`));
+    }
+    cutInfo.replaceChildren(...rows);
   }
+  const cutsDisabled = !layout || state.session.summary.approved;
+  byId("cut-less-button").disabled = cutsDisabled || plan.max_cuts <= 0;
+  byId("cut-more-button").disabled = cutsDisabled || plan.max_cuts >= 3;
+  byId("cut-button").disabled = cutsDisabled;
   byId("undo-button").disabled = !state.session.summary.undo_count || state.session.summary.approved;
   byId("reset-button").disabled = !state.session.summary.dirty || state.session.summary.approved;
   byId("repack-button").disabled = state.session.summary.approved;
@@ -221,12 +237,12 @@ function renderSvg(resetZoom = false) {
   svg.append(svgNode("rect", {
     x: 0, y: 0, width: layout.width, height: layout.height, class: "sheet-outline",
   }));
-  if (layout.cut) {
+  for (const remnant of layout.cut_plan.remnants) {
     svg.append(svgNode("rect", {
-      x: layout.cut.x,
-      y: screenY(layout, layout.cut.y, layout.cut.height),
-      width: layout.cut.width,
-      height: layout.cut.height,
+      x: remnant.x,
+      y: screenY(layout, remnant.y, remnant.height),
+      width: remnant.width,
+      height: remnant.height,
       class: "remnant-area",
     }));
   }
@@ -256,15 +272,36 @@ function renderSvg(resetZoom = false) {
     }
     svg.append(group);
   }
-  if (layout.cut) {
+  for (const cut of layout.cut_plan.cuts) {
     const attrs = { class: "cut-line" };
-    if (layout.cut.orientation === "horizontal") {
-      const y = layout.height - layout.cut.position;
-      Object.assign(attrs, { x1: 0, y1: y, x2: layout.width, y2: y });
+    let labelX;
+    let labelY;
+    if (cut.orientation === "horizontal") {
+      const y = layout.height - cut.position;
+      Object.assign(attrs, {
+        x1: cut.panel_x,
+        y1: y,
+        x2: cut.panel_x + cut.panel_width,
+        y2: y,
+      });
+      labelX = cut.panel_x + 12;
+      labelY = y - 12;
     } else {
-      Object.assign(attrs, { x1: layout.cut.position, y1: 0, x2: layout.cut.position, y2: layout.height });
+      const top = screenY(layout, cut.panel_y, cut.panel_height);
+      const bottom = screenY(layout, cut.panel_y);
+      Object.assign(attrs, {
+        x1: cut.position,
+        y1: top,
+        x2: cut.position,
+        y2: bottom,
+      });
+      labelX = cut.position + 12;
+      labelY = top + 34;
     }
     svg.append(svgNode("line", attrs));
+    const label = svgNode("text", { x: labelX, y: labelY, class: "cut-number" });
+    label.textContent = cut.order;
+    svg.append(label);
   }
 }
 
@@ -542,7 +579,24 @@ byId("transfer-button").addEventListener("click", () => {
   renderProperties();
   toast(state.transferMode ? "Выберите совместимую карту слева и щёлкните по свободному месту." : "Перенос отменён.");
 });
-byId("cut-button").addEventListener("click", () => sessionAction("cut", { layout_id: state.currentLayoutId }, { success: "Направление реза изменено." }));
+function updateCutPlan(fields, success) {
+  return sessionAction("cut-plan", {
+    layout_id: state.currentLayoutId,
+    ...fields,
+  }, { success });
+}
+byId("cut-less-button").addEventListener("click", () => {
+  const plan = currentLayout().cut_plan;
+  updateCutPlan({ max_cuts: Math.max(0, plan.max_cuts - 1) }, "Количество резов уменьшено.");
+});
+byId("cut-more-button").addEventListener("click", () => {
+  const plan = currentLayout().cut_plan;
+  updateCutPlan({ max_cuts: Math.min(3, plan.max_cuts + 1) }, "План пересчитан с дополнительным резом.");
+});
+byId("cut-button").addEventListener("click", () => updateCutPlan(
+  { toggle_first_orientation: true },
+  "Построен альтернативный план резов.",
+));
 byId("undo-button").addEventListener("click", () => sessionAction("undo", null, { success: "Последнее действие отменено." }));
 byId("reset-button").addEventListener("click", () => sessionAction("reset", null, { success: "Восстановлен исходный раскрой." }));
 byId("repack-button").addEventListener("click", async () => {

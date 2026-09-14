@@ -25,6 +25,7 @@ from packer.constants import (
 )
 from packer.layout_review import (
     calculate_layout_metrics,
+    configure_cut_plan,
     move_placement,
     refresh_guillotine_cuts,
     repack_unlocked,
@@ -75,6 +76,12 @@ class PlacementRequest(BaseModel):
 
 class LayoutRequest(BaseModel):
     layout_id: str
+
+
+class CutPlanRequest(BaseModel):
+    layout_id: str
+    max_cuts: int | None = Field(default=None, ge=0, le=3)
+    toggle_first_orientation: bool = False
 
 
 class TransferRequest(BaseModel):
@@ -204,6 +211,7 @@ def _serialize_session(session):
                 **source,
             })
         cut = layout.guillotine_cut
+        plan = layout.cut_plan
         layouts.append({
             "number": index + 1,
             "id": layout.layout_id,
@@ -230,6 +238,29 @@ def _serialize_session(session):
                     min(cut.remnant_width, cut.remnant_height) >= 60
                     and max(cut.remnant_width, cut.remnant_height) >= 1000
                 ),
+            },
+            "cut_plan": {
+                "max_cuts": plan.max_cuts,
+                "preferred_first_orientation": (
+                    plan.preferred_first_orientation),
+                "cut_count": len(plan.cuts),
+                "area_m2": float(plan.area / 1_000_000),
+                "cuts": [{
+                    "order": item.order,
+                    "orientation": item.orientation,
+                    "position": float(item.position),
+                    "panel_x": float(item.panel_x),
+                    "panel_y": float(item.panel_y),
+                    "panel_width": float(item.panel_width),
+                    "panel_height": float(item.panel_height),
+                } for item in plan.cuts],
+                "remnants": [{
+                    "x": float(item.x),
+                    "y": float(item.y),
+                    "width": float(item.width),
+                    "height": float(item.height),
+                    "area_m2": float(item.area / 1_000_000),
+                } for item in plan.remnants],
             },
         })
     return {
@@ -495,6 +526,24 @@ def toggle_cut(session_id: str, request: LayoutRequest):
     try:
         _ensure_editable(session)
         edited = toggle_guillotine_cut(session.layouts, request.layout_id)
+        session.save_undo()
+        session.layouts = edited
+        return _serialize_session(session)
+    except ValueError as error:
+        _raise_bad_request(error)
+
+
+@app.post("/api/sessions/{session_id}/cut-plan")
+def update_cut_plan(session_id: str, request: CutPlanRequest):
+    session = store.get(session_id)
+    try:
+        _ensure_editable(session)
+        edited = configure_cut_plan(
+            session.layouts,
+            request.layout_id,
+            max_cuts=request.max_cuts,
+            toggle_first_orientation=request.toggle_first_orientation,
+        )
         session.save_undo()
         session.layouts = edited
         return _serialize_session(session)

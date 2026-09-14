@@ -14,11 +14,13 @@ from packer.layout_review import (
 )
 from packer.web_app import (
     ApprovalRequest,
+    CutPlanRequest,
     MoveRequest,
     WebReviewSession,
     approve,
     move,
     store,
+    update_cut_plan,
 )
 
 
@@ -93,6 +95,7 @@ class WebAppTests(unittest.TestCase):
             self.assertTrue(payload["summary"]["dirty"])
             self.assertEqual(payload["summary"]["undo_count"], 1)
             self.assertEqual(payload["layouts"][0]["cut"]["position"], 300)
+            self.assertIn("cut_plan", payload["layouts"][0])
             self.assertEqual(payload["layouts"][0]["placements"][0]["y"], 100)
             self.assertIsInstance(jsonable_encoder(payload), dict)
 
@@ -110,6 +113,24 @@ class WebAppTests(unittest.TestCase):
 
             self.assertEqual(payload["layouts"][0]["placements"][0]["x"], 0)
             self.assertTrue(payload["move"]["snapped"])
+
+    def test_operator_can_remove_and_restore_cut_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = self.make_session(directory)
+
+            removed = update_cut_plan(session.session_id, CutPlanRequest(
+                layout_id="16:sheet:0",
+                max_cuts=0,
+            ))
+            self.assertEqual(
+                removed["layouts"][0]["cut_plan"]["cut_count"], 0)
+
+            restored = update_cut_plan(session.session_id, CutPlanRequest(
+                layout_id="16:sheet:0",
+                max_cuts=3,
+            ))
+            self.assertGreater(
+                restored["layouts"][0]["cut_plan"]["cut_count"], 0)
 
     def test_original_approval_publishes_pending_warehouse(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -140,8 +161,10 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("pointermove", script)
         self.assertIn("previewSnap", script)
         self.assertIn("Прилипло", script)
-        self.assertIn('sessionAction("cut"', script)
-        self.assertIn('?session=${session.session_id}', script)
+        self.assertIn('sessionAction("cut-plan"', script)
+        self.assertIn('id="cut-more-button"', html)
+        self.assertIn("rememberLocation", script)
+        self.assertIn('query.set("map"', script)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from packer.dxf_generator import add_guillotine_plan, create_new_dxf
 from packer.layout_review import (
     LayoutSnapshot,
     Placement,
@@ -18,6 +19,23 @@ from packer.review_candidate import (
 
 
 class ReviewCandidateTests(unittest.TestCase):
+    @staticmethod
+    def stepped_layout():
+        return refresh_guillotine_cut(LayoutSnapshot(
+            "16:sheet:3", 2788, 2058,
+            (
+                Placement("93", 0, 0, 820, 1987),
+                Placement("2", 820, 0, 1952, 833),
+                Placement("57", 820, 833, 1954, 819),
+                Placement("14", 0, 1987, 2154, 49),
+            ),
+            material_key=16,
+            container_type="sheet",
+            container_id=3,
+            thickness=16,
+            material="S",
+        ))
+
     def test_candidate_ledger_uses_operator_selected_guillotine_cut(self):
         materials = pd.DataFrame([{
             "material": "S",
@@ -43,12 +61,43 @@ class ReviewCandidateTests(unittest.TestCase):
             materials, (layout,), margin=6, kerf=4)
 
         remnants = result[result["is_remnant"] == True]
+        self.assertEqual(len(remnants), 2)
+        self.assertEqual(
+            set(zip(
+                remnants["sheet_length_mm"],
+                remnants["sheet_width_mm"],
+            )),
+            {(1000.0, 800.0), (1000.0, 200.0)},
+        )
+
+    def test_three_cut_plan_drives_ledger_and_dxf(self):
+        materials = pd.DataFrame([{
+            "material": "S",
+            "thickness_mm": 16,
+            "sheet_length_mm": 2800,
+            "sheet_width_mm": 2070,
+            "total_quantity": 2,
+            "is_remnant": False,
+            "remnant_id": None,
+        }])
+        layout = self.stepped_layout()
+
+        ledger = build_material_ledger(
+            materials, (layout,), margin=6, kerf=4)
+        remnants = ledger[ledger["is_remnant"] == True]
         self.assertEqual(len(remnants), 1)
         self.assertEqual(
             (remnants.iloc[0]["sheet_length_mm"],
              remnants.iloc[0]["sheet_width_mm"]),
-            (1000.0, 200.0),
+            (1968.0, 335.0),
         )
+
+        _document, modelspace = create_new_dxf()
+        add_guillotine_plan(modelspace, layout.cut_plan, margin=6)
+        self.assertEqual(
+            len(modelspace.query('LINE[layer=="guillotine_cut"]')), 3)
+        self.assertEqual(
+            len(modelspace.query('TEXT[layer=="guillotine_cut"]')), 3)
 
     def test_publish_candidate_replaces_only_reviewed_outputs_and_keeps_backup(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Раскрой MDF</title>
-  <link rel="stylesheet" href="/static/styles.css?v=2">
+  <link rel="stylesheet" href="/static/styles.css?v=3">
 </head>
 <body>
   <header class="topbar">
@@ -80,9 +80,13 @@
           </div>
         </section>
         <section>
-          <h2>Гильотинный остаток</h2>
+          <h2>План гильотинных резов</h2>
           <div id="cut-info" class="info"></div>
-          <button id="cut-button">Сменить направление</button>
+          <div class="button-grid cut-actions">
+            <button id="cut-less-button">− рез</button>
+            <button id="cut-more-button">+ рез</button>
+            <button id="cut-button" class="wide">Другой первый рез</button>
+          </div>
         </section>
         <section>
           <h2>Действия</h2>
@@ -103,6 +107,6 @@
 
   <div id="toast" class="toast" hidden></div>
   <div id="busy" class="busy" hidden><div class="spinner"></div><span>Выполняется расчёт…</span></div>
-  <script src="/static/app.js?v=2"></script>
+  <script src="/static/app.js?v=3"></script>
 </body>
 </html>

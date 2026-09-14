@@ -1,6 +1,7 @@
 """Editable, engine-independent layout snapshots for operator review."""
 
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Hashable, Iterable
 
 
@@ -42,6 +43,47 @@ class GuillotineCut:
 
 
 @dataclass(frozen=True)
+class CutSegment:
+    """One ordered guillotine cut scoped to a previously created panel."""
+
+    order: int
+    orientation: str
+    position: float
+    panel_x: float
+    panel_y: float
+    panel_width: float
+    panel_height: float
+
+
+@dataclass(frozen=True)
+class RemnantRegion:
+    """One non-overlapping empty leaf produced by a guillotine cut plan."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+
+    @property
+    def area(self):
+        return self.width * self.height
+
+
+@dataclass(frozen=True)
+class CutPlan:
+    """An ordered cut tree and the usable remnants produced by its leaves."""
+
+    cuts: tuple[CutSegment, ...] = ()
+    remnants: tuple[RemnantRegion, ...] = ()
+    max_cuts: int = 3
+    preferred_first_orientation: str | None = None
+
+    @property
+    def area(self):
+        return sum(remnant.area for remnant in self.remnants)
+
+
+@dataclass(frozen=True)
 class LayoutSnapshot:
     """A reviewable snapshot of one sheet or remnant."""
 
@@ -56,6 +98,7 @@ class LayoutSnapshot:
     thickness: float | None = None
     material: str = ""
     guillotine_cut: GuillotineCut | None = None
+    cut_plan: CutPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -148,6 +191,171 @@ def select_guillotine_cut(layout, orientation=None):
     )
 
 
+@dataclass(frozen=True)
+class _PlanOption:
+    area: float
+    cuts: tuple[CutSegment, ...]
+    remnants: tuple[RemnantRegion, ...]
+
+
+def calculate_cut_plan(
+        layout, max_cuts=3, preferred_first_orientation=None,
+        minimum_width=60, minimum_length=1000,
+        extra_cut_penalty_area=200_000):
+    """Find the best physically executable plan of up to ``max_cuts`` cuts."""
+    max_cuts = max(0, min(3, int(max_cuts)))
+    if preferred_first_orientation not in {None, "horizontal", "vertical"}:
+        raise ValueError(
+            f"Неизвестное направление реза: {preferred_first_orientation}")
+    if not layout.placements or max_cuts == 0:
+        return CutPlan(
+            max_cuts=max_cuts,
+            preferred_first_orientation=preferred_first_orientation,
+        )
+
+    placements = tuple(layout.placements)
+    root = (0.0, 0.0, float(layout.width), float(layout.height))
+
+    def usable(region):
+        _x, _y, width, height = region
+        return (
+            min(width, height) >= minimum_width
+            and max(width, height) >= minimum_length
+        )
+
+    def candidates(region, placement_ids, required_orientation):
+        x, y, width, height = region
+        selected = tuple(placements[index] for index in placement_ids)
+        orientations = (
+            (required_orientation,)
+            if required_orientation is not None
+            else ("vertical", "horizontal")
+        )
+        if "vertical" in orientations:
+            positions = sorted({
+                edge
+                for item in selected
+                for edge in (item.x, item.x + item.width)
+            })
+            for position in positions:
+                if position <= x + _EPSILON or position >= x + width - _EPSILON:
+                    continue
+                if any(
+                    item.x + _EPSILON < position
+                    < item.x + item.width - _EPSILON
+                    for item in selected
+                ):
+                    continue
+                first_ids = tuple(
+                    index for index in placement_ids
+                    if placements[index].x + placements[index].width
+                    <= position + _EPSILON
+                )
+                second_ids = tuple(
+                    index for index in placement_ids
+                    if placements[index].x >= position - _EPSILON
+                )
+                if len(first_ids) + len(second_ids) != len(placement_ids):
+                    continue
+                yield (
+                    CutSegment(0, "vertical", position, x, y, width, height),
+                    (x, y, position - x, height), first_ids,
+                    (position, y, x + width - position, height), second_ids,
+                )
+        if "horizontal" in orientations:
+            positions = sorted({
+                edge
+                for item in selected
+                for edge in (item.y, item.y + item.height)
+            })
+            for position in positions:
+                if position <= y + _EPSILON or position >= y + height - _EPSILON:
+                    continue
+                if any(
+                    item.y + _EPSILON < position
+                    < item.y + item.height - _EPSILON
+                    for item in selected
+                ):
+                    continue
+                first_ids = tuple(
+                    index for index in placement_ids
+                    if placements[index].y + placements[index].height
+                    <= position + _EPSILON
+                )
+                second_ids = tuple(
+                    index for index in placement_ids
+                    if placements[index].y >= position - _EPSILON
+                )
+                if len(first_ids) + len(second_ids) != len(placement_ids):
+                    continue
+                yield (
+                    CutSegment(0, "horizontal", position, x, y, width, height),
+                    (x, y, width, position - y), first_ids,
+                    (x, position, width, y + height - position), second_ids,
+                )
+
+    @lru_cache(maxsize=None)
+    def options(region, placement_ids, cuts_left, required_orientation=None):
+        if not placement_ids:
+            if usable(region):
+                remnant = RemnantRegion(*region)
+                return {0: _PlanOption(remnant.area, (), (remnant,))}
+            return {0: _PlanOption(0.0, (), ())}
+        result = {0: _PlanOption(0.0, (), ())}
+        if cuts_left == 0:
+            return result
+        for cut, first, first_ids, second, second_ids in candidates(
+                region, placement_ids, required_orientation):
+            first_options = options(first, first_ids, cuts_left - 1, None)
+            second_options = options(second, second_ids, cuts_left - 1, None)
+            for first_count, first_option in first_options.items():
+                for second_count, second_option in second_options.items():
+                    count = 1 + first_count + second_count
+                    if count > cuts_left:
+                        continue
+                    proposal = _PlanOption(
+                        first_option.area + second_option.area,
+                        (cut,) + first_option.cuts + second_option.cuts,
+                        first_option.remnants + second_option.remnants,
+                    )
+                    current = result.get(count)
+                    if current is None or proposal.area > current.area + _EPSILON:
+                        result[count] = proposal
+        return result
+
+    available = options(
+        root,
+        tuple(range(len(placements))),
+        max_cuts,
+        preferred_first_orientation,
+    )
+    ranked = []
+    for count, option in available.items():
+        if option.area <= _EPSILON:
+            continue
+        operational_score = (
+            option.area - extra_cut_penalty_area * max(0, count - 1)
+        )
+        ranked.append((operational_score, option.area, -count, option))
+    best = max(ranked, key=lambda item: item[:3], default=None)
+    if best is None or best[0] <= 0:
+        return CutPlan(
+            max_cuts=max_cuts,
+            preferred_first_orientation=preferred_first_orientation,
+        )
+    option = best[-1]
+    ordered_cuts = tuple(
+        replace(cut, order=index)
+        for index, cut in enumerate(option.cuts, start=1)
+    )
+    return CutPlan(
+        cuts=ordered_cuts,
+        remnants=option.remnants,
+        max_cuts=max_cuts,
+        preferred_first_orientation=preferred_first_orientation,
+    )
+
+
 def refresh_guillotine_cut(layout):
     """Recalculate cut geometry while preserving the operator's direction."""
     orientation = (
@@ -158,7 +366,16 @@ def refresh_guillotine_cut(layout):
     cut = select_guillotine_cut(layout, orientation)
     if cut is None and orientation is not None:
         cut = select_guillotine_cut(layout)
-    return replace(layout, guillotine_cut=cut)
+    existing_plan = layout.cut_plan
+    plan = calculate_cut_plan(
+        layout,
+        max_cuts=existing_plan.max_cuts if existing_plan is not None else 3,
+        preferred_first_orientation=(
+            existing_plan.preferred_first_orientation
+            if existing_plan is not None else None
+        ),
+    )
+    return replace(layout, guillotine_cut=cut, cut_plan=plan)
 
 
 def refresh_guillotine_cuts(layouts):
@@ -181,24 +398,62 @@ def toggle_guillotine_cut(layouts, layout_id):
             else "horizontal"
         )
         cut = calculate_guillotine_cut(layout, orientation)
-        edited.append(replace(layout, guillotine_cut=cut))
+        current_plan = layout.cut_plan or CutPlan()
+        plan = calculate_cut_plan(
+            layout,
+            max_cuts=current_plan.max_cuts,
+            preferred_first_orientation=orientation,
+        )
+        edited.append(replace(
+            layout, guillotine_cut=cut, cut_plan=plan))
     if not found:
         raise ValueError(f"Не найдена карта {layout_id}")
     return tuple(edited)
 
 
+def configure_cut_plan(
+        layouts, layout_id, max_cuts=None, toggle_first_orientation=False):
+    """Change an operator plan limit or request the opposite first cut."""
+    edited = []
+    found = False
+    for layout in layouts:
+        if layout.layout_id != layout_id:
+            edited.append(layout)
+            continue
+        found = True
+        current = layout.cut_plan or CutPlan()
+        limit = current.max_cuts if max_cuts is None else int(max_cuts)
+        preferred = current.preferred_first_orientation
+        if toggle_first_orientation:
+            first = current.cuts[0].orientation if current.cuts else preferred
+            preferred = "vertical" if first != "vertical" else "horizontal"
+        plan = calculate_cut_plan(
+            layout,
+            max_cuts=limit,
+            preferred_first_orientation=preferred,
+        )
+        edited.append(replace(layout, cut_plan=plan))
+    if not found:
+        raise ValueError(f"Не найдена карта {layout_id}")
+    return tuple(edited)
+
+
+def guillotine_remnants(layout, minimum_width=60, minimum_length=1000):
+    """Return all usable, non-overlapping remnants from the selected cut tree."""
+    layout = refresh_guillotine_cut(layout)
+    return tuple(
+        (max(item.width, item.height), min(item.width, item.height))
+        for item in layout.cut_plan.remnants
+        if min(item.width, item.height) >= minimum_width
+        and max(item.width, item.height) >= minimum_length
+    )
+
+
 def guillotine_remnant(layout, minimum_width=60, minimum_length=1000):
-    """Return the selected stock remnant, or ``None`` if it is too small."""
-    cut = refresh_guillotine_cut(layout).guillotine_cut
-    if cut is None:
-        return None
-    width = cut.remnant_width
-    height = cut.remnant_height
-    if min(width, height) < minimum_width:
-        return None
-    if max(width, height) < minimum_length:
-        return None
-    return max(width, height), min(width, height)
+    """Return the largest selected remnant for legacy single-remnant callers."""
+    remnants = guillotine_remnants(
+        layout, minimum_width, minimum_length)
+    return max(remnants, key=lambda item: item[0] * item[1], default=None)
 
 
 def calculate_layout_metrics(layouts: Iterable[LayoutSnapshot]):

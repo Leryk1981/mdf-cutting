@@ -95,6 +95,7 @@ p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
 .part.selected { fill: #ffe1bd; stroke: var(--orange); stroke-width: 2; }
 .part-label { font-size: 24px; fill: #18333d; text-anchor: middle; dominant-baseline: central; pointer-events: none; user-select: none; }
 .cut-line { stroke: var(--purple); stroke-width: 2; stroke-dasharray: 12 8; vector-effect: non-scaling-stroke; shape-rendering: geometricPrecision; }
+.cut-number { fill: var(--purple); font-size: 34px; font-weight: 700; paint-order: stroke; stroke: white; stroke-width: 5px; pointer-events: none; }
 .ghost { fill: #d56a1b1a; stroke: var(--orange); stroke-width: 2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .ghost.snapped { fill: #31834b24; stroke: var(--green); stroke-dasharray: none; }
 .ghost.invalid { fill: #b4231824; stroke: var(--danger); stroke-dasharray: 5 4; }
@@ -118,6 +119,7 @@ p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
 .muted { color: var(--muted); }
 .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .button-grid .wide { grid-column: 1 / 3; }
+.cut-actions { margin-top: 8px; }
 .approval { display: grid; gap: 7px; }
 .approval .primary { min-height: 40px; }
 
