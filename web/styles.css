@@ -95,7 +95,13 @@ p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
 .part.selected { fill: #ffe1bd; stroke: var(--orange); stroke-width: 2; }
 .part-label { font-size: 24px; fill: #18333d; text-anchor: middle; dominant-baseline: central; pointer-events: none; user-select: none; }
 .cut-line { stroke: var(--purple); stroke-width: 2; stroke-dasharray: 12 8; vector-effect: non-scaling-stroke; shape-rendering: geometricPrecision; }
-.ghost { fill: none; stroke: var(--orange); stroke-width: 1; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.ghost { fill: #d56a1b1a; stroke: var(--orange); stroke-width: 2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.ghost.snapped { fill: #31834b24; stroke: var(--green); stroke-dasharray: none; }
+.ghost.invalid { fill: #b4231824; stroke: var(--danger); stroke-dasharray: 5 4; }
+.snap-guide { stroke: var(--green); stroke-width: 1; stroke-dasharray: 5 5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.drag-status { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); padding: 6px 10px; border-radius: 4px; color: white; background: var(--orange); font-weight: 600; box-shadow: 0 2px 8px #0003; pointer-events: none; }
+.drag-status.snapped { background: var(--green); }
+.drag-status.invalid { background: var(--danger); }
 .empty-map { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 8px 2px 0; color: var(--muted); font-size: 11px; }
 .legend i { display: inline-block; width: 18px; height: 9px; margin-right: 4px; vertical-align: -1px; border: 1px solid; }

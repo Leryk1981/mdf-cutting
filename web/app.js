@@ -279,6 +279,97 @@ function modelPoint(event) {
   return { x: point.x, y: layout.height - point.y };
 }
 
+function intersects(first, second) {
+  return first.x < second.x + second.width
+    && first.x + first.width > second.x
+    && first.y < second.y + second.height
+    && first.y + first.height > second.y;
+}
+
+function validPosition(layout, placement, x, y) {
+  const candidate = { ...placement, x, y };
+  if (x < 0 || y < 0
+      || x + placement.width > layout.width
+      || y + placement.height > layout.height) return false;
+  return !layout.placements.some((other) => (
+    other.id !== placement.id && intersects(candidate, other)
+  ));
+}
+
+function nearestTargets(targets, value, tolerance) {
+  return [...new Set(targets)]
+    .filter((target) => Math.abs(target - value) <= tolerance)
+    .sort((left, right) => Math.abs(left - value) - Math.abs(right - value));
+}
+
+function previewSnap(layout, placement, rawX, rawY) {
+  const pixels = 18;
+  const tolerance = Math.max(4, pixels * state.viewBox.width / svg.clientWidth);
+  const xTargets = [0, layout.width - placement.width];
+  const yTargets = [0, layout.height - placement.height];
+  for (const other of layout.placements) {
+    if (other.id === placement.id) continue;
+    xTargets.push(other.x - placement.width, other.x + other.width);
+    yTargets.push(other.y - placement.height, other.y + other.height);
+  }
+  const nearbyX = nearestTargets(xTargets, rawX, tolerance);
+  const nearbyY = nearestTargets(yTargets, rawY, tolerance);
+  const xCandidates = nearbyX.length ? nearbyX : [rawX];
+  const yCandidates = nearbyY.length ? nearbyY : [rawY];
+  const candidates = [];
+  for (const x of xCandidates) {
+    for (const y of yCandidates) candidates.push({ x, y });
+  }
+  candidates.sort((first, second) => (
+    Math.abs(first.x - rawX) + Math.abs(first.y - rawY)
+    - Math.abs(second.x - rawX) - Math.abs(second.y - rawY)
+  ));
+  const candidate = candidates.find(({ x, y }) => (
+    validPosition(layout, placement, x, y)
+  )) || { x: rawX, y: rawY };
+  return {
+    ...candidate,
+    tolerance,
+    valid: validPosition(layout, placement, candidate.x, candidate.y),
+    snappedX: candidate.x !== rawX,
+    snappedY: candidate.y !== rawY,
+  };
+}
+
+function showDragStatus(preview) {
+  const status = byId("drag-status");
+  status.hidden = false;
+  status.className = "drag-status";
+  if (!preview.valid) {
+    status.classList.add("invalid");
+    status.textContent = "Недопустимое положение";
+  } else if (preview.snappedX || preview.snappedY) {
+    status.classList.add("snapped");
+    const axes = [preview.snappedX ? "X" : "", preview.snappedY ? "Y" : ""].filter(Boolean).join(" + ");
+    status.textContent = `Прилипло · ${axes}`;
+  } else {
+    status.textContent = "Свободное положение";
+  }
+}
+
+function hideDragStatus() {
+  byId("drag-status").hidden = true;
+}
+
+function drawSnapGuides(layout, placement, preview) {
+  if (preview.snappedX) {
+    for (const x of [preview.x, preview.x + placement.width]) {
+      svg.append(svgNode("line", { x1: x, y1: 0, x2: x, y2: layout.height, class: "snap-guide" }));
+    }
+  }
+  if (preview.snappedY) {
+    for (const modelY of [preview.y, preview.y + placement.height]) {
+      const y = layout.height - modelY;
+      svg.append(svgNode("line", { x1: 0, y1: y, x2: layout.width, y2: y, class: "snap-guide" }));
+    }
+  }
+}
+
 function partPointerDown(event, placement) {
   event.stopPropagation();
   if (state.transferMode) {
@@ -302,30 +393,49 @@ svg.addEventListener("pointermove", (event) => {
   if (!state.drag || state.drag.pointerId !== event.pointerId) return;
   const layout = currentLayout();
   const point = modelPoint(event);
-  const x = Math.round(state.drag.placement.x + point.x - state.drag.start.x);
-  const y = Math.round(state.drag.placement.y + point.y - state.drag.start.y);
-  svg.querySelector(".ghost")?.remove();
+  const rawX = Math.round(state.drag.placement.x + point.x - state.drag.start.x);
+  const rawY = Math.round(state.drag.placement.y + point.y - state.drag.start.y);
+  const preview = previewSnap(layout, state.drag.placement, rawX, rawY);
+  state.drag.preview = preview;
+  svg.querySelectorAll(".ghost, .snap-guide").forEach((node) => node.remove());
+  drawSnapGuides(layout, state.drag.placement, preview);
   svg.append(svgNode("rect", {
-    x,
-    y: screenY(layout, y, state.drag.placement.height),
+    x: preview.x,
+    y: screenY(layout, preview.y, state.drag.placement.height),
     width: state.drag.placement.width,
     height: state.drag.placement.height,
-    class: "ghost",
+    class: `ghost${preview.valid ? preview.snappedX || preview.snappedY ? " snapped" : "" : " invalid"}`,
   }));
+  showDragStatus(preview);
 });
 
 svg.addEventListener("pointerup", async (event) => {
   if (!state.drag || state.drag.pointerId !== event.pointerId) return;
   const drag = state.drag;
   state.drag = null;
+  hideDragStatus();
   const point = modelPoint(event);
-  const x = Math.round(drag.placement.x + point.x - drag.start.x);
-  const y = Math.round(drag.placement.y + point.y - drag.start.y);
+  const rawX = Math.round(drag.placement.x + point.x - drag.start.x);
+  const rawY = Math.round(drag.placement.y + point.y - drag.start.y);
+  const preview = drag.preview || previewSnap(currentLayout(), drag.placement, rawX, rawY);
   await sessionAction("move", {
     placement_id: drag.placement.id,
     target_layout_id: state.currentLayoutId,
-    x, y,
-  }, { resetZoom: false, success: "Положение детали сохранено." });
+    x: preview.x,
+    y: preview.y,
+    snap_tolerance: preview.tolerance,
+  }, {
+    resetZoom: false,
+    success: preview.snappedX || preview.snappedY
+      ? "Деталь прилипла к грани."
+      : "Положение детали сохранено.",
+  });
+});
+
+svg.addEventListener("pointercancel", () => {
+  state.drag = null;
+  hideDragStatus();
+  renderSvg(false);
 });
 
 svg.addEventListener("wheel", (event) => {

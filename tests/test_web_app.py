@@ -96,6 +96,21 @@ class WebAppTests(unittest.TestCase):
             self.assertEqual(payload["layouts"][0]["placements"][0]["y"], 100)
             self.assertIsInstance(jsonable_encoder(payload), dict)
 
+    def test_web_move_applies_operator_snap_tolerance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = self.make_session(directory)
+
+            payload = move(session.session_id, MoveRequest(
+                placement_id="p1",
+                target_layout_id="16:sheet:0",
+                x=4,
+                y=100,
+                snap_tolerance=5,
+            ))
+
+            self.assertEqual(payload["layouts"][0]["placements"][0]["x"], 0)
+            self.assertTrue(payload["move"]["snapped"])
+
     def test_original_approval_publishes_pending_warehouse(self):
         with tempfile.TemporaryDirectory() as directory:
             session = self.make_session(directory)
@@ -123,6 +138,8 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("shape-rendering: crispEdges", css)
         self.assertIn(".setup.collapsed #run-form", css)
         self.assertIn("pointermove", script)
+        self.assertIn("previewSnap", script)
+        self.assertIn("Прилипло", script)
         self.assertIn('sessionAction("cut"', script)
         self.assertIn('?session=${session.session_id}', script)
 

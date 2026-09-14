@@ -29,6 +29,7 @@ from packer.layout_review import (
     refresh_guillotine_cuts,
     repack_unlocked,
     rotate_placement,
+    snap_placement,
     toggle_guillotine_cut,
     transfer_placement_at,
 )
@@ -65,6 +66,7 @@ class MoveRequest(BaseModel):
     target_layout_id: str
     x: float
     y: float
+    snap_tolerance: float = Field(default=40, ge=0, le=250)
 
 
 class PlacementRequest(BaseModel):
@@ -399,17 +401,32 @@ def move(session_id: str, request: MoveRequest):
         placement_id = session.resolve_placement(request.placement_id)
         if placement_id in session.locked_ids:
             raise ValueError("Сначала снимите фиксацию детали")
-        edited = move_placement(
+        snapped_x, snapped_y = snap_placement(
             session.layouts,
             placement_id,
             request.target_layout_id,
             request.x,
             request.y,
+            tolerance=request.snap_tolerance,
+        )
+        edited = move_placement(
+            session.layouts,
+            placement_id,
+            request.target_layout_id,
+            snapped_x,
+            snapped_y,
         )
         session.save_undo()
         session.layouts = edited
         session.manual_ids.add(placement_id)
-        return _serialize_session(session)
+        payload = _serialize_session(session)
+        payload["move"] = {
+            "x": float(snapped_x),
+            "y": float(snapped_y),
+            "snapped": bool(
+                snapped_x != request.x or snapped_y != request.y),
+        }
+        return payload
     except ValueError as error:
         _raise_bad_request(error)
 
