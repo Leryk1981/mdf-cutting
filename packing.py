@@ -9,11 +9,17 @@ from .dxf_generator import (
     create_new_dxf,
     add_sheet_outline,
     add_detail_to_sheet,
+    add_guillotine_cut,
     add_layout_filename_title,
     add_details_list
 )
 from .remnants import RemnantsManager
-from .layout_review import LayoutSnapshot, Placement
+from .layout_review import (
+    LayoutSnapshot,
+    Placement,
+    guillotine_remnant,
+    refresh_guillotine_cut,
+)
 from .constants import (
     MATERIALS_REQUIRED_COLUMNS,
     DETAILS_REQUIRED_COLUMNS,
@@ -381,13 +387,9 @@ def pack_and_generate_dxf(
 
         logger.info(f"Использовано целых листов: {used_full_sheets}")
 
-        # Compute leftovers from the real container that was packed.  A
-        # consumed remnant must never be recalculated using full-sheet size.
+        # Remnants are finalized after reviewable layouts and their explicit
+        # guillotine cuts have been created.
         generated_remnants = []
-        for _container_type, _container_id, used_packer in all_packers:
-            generated_remnants.extend(remnants_manager.calculate_remnants(
-                used_packer, used_packer[0].width + 2 * margin,
-                used_packer[0].height + 2 * margin, margin))
 
         # ФАЗА 3: Создание DXF файлов и финального упаковщика
         logger.info("\nФаза 3: Создание DXF файлов")
@@ -516,19 +518,7 @@ def pack_and_generate_dxf(
                     logger.info(
                         f"Создается карта раскроя для целого листа: {output_file}")
 
-                # Добавляем заголовок
-                add_layout_filename_title(
-                    msp, original_length, original_width, output_file)
-
-                # Добавляем список деталей БЕЗ имени файла
-                # Не передаем имя файла!
-                add_details_list(msp, original_width, details_list)
-
-                # Сохраняем файл
-                doc.saveas(output_file)
-                logger.info(f"Сохранен файл: {output_file}")
-                layout_count += 1
-                layout_snapshots.append(LayoutSnapshot(
+                layout_snapshot = refresh_guillotine_cut(LayoutSnapshot(
                     layout_id=f"{material_key}:{container_type}:{container_id}",
                     width=length_with_margin,
                     height=width_with_margin,
@@ -540,6 +530,22 @@ def pack_and_generate_dxf(
                     thickness=float(thickness),
                     material=material,
                 ))
+
+                add_guillotine_cut(
+                    msp, layout_snapshot.guillotine_cut, margin)
+
+                # Добавляем заголовок
+                add_layout_filename_title(
+                    msp, original_length, original_width, output_file)
+                # Добавляем список деталей БЕЗ имени файла
+                # Не передаем имя файла!
+                add_details_list(msp, original_width, details_list)
+
+                # Сохраняем файл
+                doc.saveas(output_file)
+                logger.info(f"Сохранен файл: {output_file}")
+                layout_count += 1
+                layout_snapshots.append(layout_snapshot)
 
                 # Добавляем контейнер в финальный упаковщик
                 final_packer.add_bin(length_with_margin,
@@ -556,6 +562,21 @@ def pack_and_generate_dxf(
                     f"Ошибка при создании DXF для контейнера {container_id}: {str(e)}")
                 import traceback
                 logger.error(traceback.format_exc())
+
+        generated_remnants = [
+            remnant
+            for layout in layout_snapshots
+            if (
+                layout.thickness == float(thickness)
+                and layout.material == material
+            )
+            for remnant in [guillotine_remnant(
+                layout,
+                remnants_manager.min_remnant_width,
+                remnants_manager.min_remnant_length,
+            )]
+            if remnant is not None
+        ]
 
         # Устанавливаем финальный упаковщик для этой комбинации материал/толщина
         packers_by_material[material_key] = final_packer

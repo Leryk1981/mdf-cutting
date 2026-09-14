@@ -3,16 +3,53 @@ import unittest
 from packer.layout_review import (
     LayoutSnapshot,
     Placement,
+    guillotine_remnant,
     move_placement,
     repack_unlocked,
+    refresh_guillotine_cut,
     rotate_placement,
     snap_placement,
+    toggle_guillotine_cut,
     transfer_fit,
     transfer_placement_at,
 )
 
 
 class LayoutReviewTests(unittest.TestCase):
+    def test_default_guillotine_cut_keeps_the_largest_outer_remnant(self):
+        layout = refresh_guillotine_cut(LayoutSnapshot(
+            "sheet-1", 1200, 1000,
+            (Placement("A", 0, 0, 1000, 200),),
+        ))
+
+        self.assertEqual(layout.guillotine_cut.orientation, "horizontal")
+        self.assertEqual(layout.guillotine_cut.position, 200)
+        self.assertEqual(guillotine_remnant(layout), (1200, 800))
+
+    def test_operator_can_select_vertical_guillotine_cut(self):
+        layout = refresh_guillotine_cut(LayoutSnapshot(
+            "sheet-1", 1200, 1000,
+            (Placement("A", 0, 0, 1000, 200),),
+        ))
+
+        edited = toggle_guillotine_cut((layout,), "sheet-1")
+
+        self.assertEqual(edited[0].guillotine_cut.orientation, "vertical")
+        self.assertEqual(edited[0].guillotine_cut.position, 1000)
+        self.assertEqual(guillotine_remnant(edited[0]), (1000, 200))
+
+    def test_move_recalculates_cut_and_preserves_selected_direction(self):
+        layout = refresh_guillotine_cut(LayoutSnapshot(
+            "sheet-1", 1200, 1000,
+            (Placement("A", 0, 0, 1000, 200),),
+        ))
+
+        edited = move_placement((layout,), "A", "sheet-1", 0, 100)
+
+        self.assertEqual(edited[0].guillotine_cut.orientation, "horizontal")
+        self.assertEqual(edited[0].guillotine_cut.position, 300)
+        self.assertEqual(guillotine_remnant(edited[0]), (1200, 700))
+
     def test_transfer_fit_distinguishes_direct_rotated_and_impossible(self):
         layouts = (
             LayoutSnapshot(

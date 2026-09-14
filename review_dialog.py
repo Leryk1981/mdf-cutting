@@ -11,8 +11,10 @@ from .layout_review import (
     calculate_layout_metrics,
     move_placement,
     repack_unlocked,
+    refresh_guillotine_cuts,
     rotate_placement,
     snap_placement,
+    toggle_guillotine_cut,
     transfer_fit,
     transfer_placement_at,
 )
@@ -41,7 +43,7 @@ class OperatorReviewDialog:
         self.margin = margin
         self.kerf = kerf
         self.remnant_count = remnant_count
-        self.original_layouts = tuple(packing_result.layouts)
+        self.original_layouts = refresh_guillotine_cuts(packing_result.layouts)
         self.layouts = self.original_layouts
         self.locked_ids = set()
         self.manual_ids = set()
@@ -136,6 +138,17 @@ class OperatorReviewDialog:
             right, "Перенести на другую карту", self._start_transfer)
         self._button(right, "Отменить действие", self._undo)
         self._button(right, "Вернуть исходный раскрой", self._reset)
+        ttk.Separator(right).pack(fill="x", pady=10)
+        ttk.Label(
+            right, text="Гильотинный остаток",
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w")
+        self.cut_label = ttk.Label(
+            right, wraplength=250, justify="left", padding=(0, 6, 0, 4),
+        )
+        self.cut_label.pack(fill="x")
+        self.cut_button = self._button(
+            right, "Сменить направление реза", self._toggle_cut)
         ttk.Separator(right).pack(fill="x", pady=10)
         self._button(right, "Пересчитать остальные детали", self._auto_repack)
         self._button(right, "Открыть DXF текущего варианта", self._open_preview)
@@ -260,6 +273,16 @@ class OperatorReviewDialog:
             self.offset_x + layout.width * self.scale,
             self.offset_y + layout.height * self.scale,
             fill="white", outline="#30343b", width=2)
+        cut = layout.guillotine_cut
+        if cut is not None:
+            remnant = self._model_rectangle(
+                cut.remnant_x,
+                cut.remnant_y,
+                cut.remnant_width,
+                cut.remnant_height,
+            )
+            self.canvas.create_rectangle(
+                *remnant, fill="#e5f4e8", outline="")
         self.canvas_title.configure(
             text=f"{Path(layout.output_file).name} — "
                  f"{layout.width:g} × {layout.height:g} мм")
@@ -284,7 +307,17 @@ class OperatorReviewDialog:
                     text=str(source["part_id"]), fill="#102a36",
                     font=("Segoe UI", 9, "bold"))
                 self.item_placements[label] = placement.placement_id
+        if cut is not None:
+            if cut.orientation == "horizontal":
+                start = self._model_point(0, cut.position)
+                end = self._model_point(layout.width, cut.position)
+            else:
+                start = self._model_point(cut.position, 0)
+                end = self._model_point(cut.position, layout.height)
+            self.canvas.create_line(
+                *start, *end, fill="#9b2c86", width=3, dash=(10, 6))
         self._update_detail()
+        self._update_cut_info()
 
     def _canvas_coordinates(self, placement):
         layout = self._current_layout()
@@ -293,6 +326,18 @@ class OperatorReviewDialog:
         top = self.offset_y + (
             layout.height - placement.y - placement.height) * self.scale
         return left, top, right, top + placement.height * self.scale
+
+    def _model_point(self, x, y):
+        layout = self._current_layout()
+        return (
+            self.offset_x + x * self.scale,
+            self.offset_y + (layout.height - y) * self.scale,
+        )
+
+    def _model_rectangle(self, x, y, width, height):
+        left, bottom = self._model_point(x, y)
+        right, top = self._model_point(x + width, y + height)
+        return left, top, right, bottom
 
     def _to_model(self, x, y):
         layout = self._current_layout()
@@ -409,6 +454,37 @@ class OperatorReviewDialog:
             self.locked_ids.add(self.selected_id)
             self._status("Положение детали закреплено.")
         self._render()
+
+    def _toggle_cut(self):
+        layout = self._current_layout()
+        if layout is None:
+            return
+        try:
+            edited = toggle_guillotine_cut(self.layouts, layout.layout_id)
+        except ValueError as error:
+            self._status(str(error), True)
+            return
+        self._save_undo()
+        self.layouts = edited
+        self.dirty = self.layouts != self.original_layouts
+        self._render()
+        cut = self._current_layout().guillotine_cut
+        direction = (
+            "горизонтальный"
+            if cut.orientation == "horizontal"
+            else "вертикальный"
+        )
+        usable = (
+            min(cut.remnant_width, cut.remnant_height) >= 60
+            and max(cut.remnant_width, cut.remnant_height) >= 1000
+        )
+        result = (
+            "Остаток будет записан на склад."
+            if usable
+            else "Остаток слишком мал и на склад не попадёт."
+        )
+        self._status(
+            f"Выбран {direction} гильотинный рез. {result}")
 
     def _editable_selection(self):
         if self.selected_id is None:
@@ -593,6 +669,37 @@ class OperatorReviewDialog:
             f"(исходно {original.layout_count})\n"
             f"Заполнение: {current.utilization:.1%}\n"
             f"Отмена: {len(self.undo_stack)} действий"))
+
+    def _update_cut_info(self):
+        layout = self._current_layout()
+        cut = layout.guillotine_cut if layout is not None else None
+        if cut is None:
+            self.cut_label.configure(text="Пригодного внешнего остатка нет.")
+            self.cut_button.configure(state="disabled")
+            return
+        direction = (
+            "Горизонтальный"
+            if cut.orientation == "horizontal"
+            else "Вертикальный"
+        )
+        alternative = (
+            "вертикальный"
+            if cut.orientation == "horizontal"
+            else "горизонтальный"
+        )
+        usable = (
+            min(cut.remnant_width, cut.remnant_height) >= 60
+            and max(cut.remnant_width, cut.remnant_height) >= 1000
+        )
+        stock_text = "будет записан на склад" if usable else "слишком мал для склада"
+        self.cut_label.configure(text=(
+            f"{direction} рез: {cut.position:g} мм\n"
+            f"Остаток: {cut.remnant_width:g} × "
+            f"{cut.remnant_height:g} мм\n"
+            f"Площадь: {cut.area / 1_000_000:.3f} м² — {stock_text}."
+        ))
+        self.cut_button.configure(
+            text=f"Выбрать {alternative} рез", state="normal")
 
     def _stage(self):
         active = tuple(layout for layout in self.layouts if layout.placements)

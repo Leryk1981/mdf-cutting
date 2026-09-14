@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from packer.layout_review import LayoutSnapshot, Placement
+from packer.layout_review import (
+    LayoutSnapshot,
+    Placement,
+    refresh_guillotine_cut,
+    toggle_guillotine_cut,
+)
 from packer.review_candidate import (
     build_material_ledger,
     publish_candidate_outputs,
@@ -13,6 +18,38 @@ from packer.review_candidate import (
 
 
 class ReviewCandidateTests(unittest.TestCase):
+    def test_candidate_ledger_uses_operator_selected_guillotine_cut(self):
+        materials = pd.DataFrame([{
+            "material": "S",
+            "thickness_mm": 16,
+            "sheet_length_mm": 1212,
+            "sheet_width_mm": 1012,
+            "total_quantity": 2,
+            "is_remnant": False,
+            "remnant_id": None,
+        }])
+        layout = refresh_guillotine_cut(LayoutSnapshot(
+            "16:sheet:0", 1200, 1000,
+            (Placement("A", 0, 0, 1000, 200, material_key=16),),
+            material_key=16,
+            container_type="sheet",
+            container_id=0,
+            thickness=16,
+            material="S",
+        ))
+        layout = toggle_guillotine_cut((layout,), layout.layout_id)[0]
+
+        result = build_material_ledger(
+            materials, (layout,), margin=6, kerf=4)
+
+        remnants = result[result["is_remnant"] == True]
+        self.assertEqual(len(remnants), 1)
+        self.assertEqual(
+            (remnants.iloc[0]["sheet_length_mm"],
+             remnants.iloc[0]["sheet_width_mm"]),
+            (1000.0, 200.0),
+        )
+
     def test_publish_candidate_replaces_only_reviewed_outputs_and_keeps_backup(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -143,6 +180,12 @@ class ReviewCandidateTests(unittest.TestCase):
             self.assertEqual(len(paths), 1)
             self.assertEqual(paths[0].name, "sheet_16mm_0.dxf")
             self.assertGreater(paths[0].stat().st_size, 0)
+            import ezdxf
+            document = ezdxf.readfile(paths[0])
+            cut_lines = document.modelspace().query(
+                'LINE[layer=="guillotine_cut"]')
+            self.assertEqual(len(cut_lines), 1)
+            self.assertEqual(cut_lines[0].dxf.linetype, "DASHED")
 
 
 if __name__ == "__main__":

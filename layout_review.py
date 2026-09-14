@@ -26,6 +26,22 @@ class Placement:
 
 
 @dataclass(frozen=True)
+class GuillotineCut:
+    """One full-width or full-height cut separating a stock remnant."""
+
+    orientation: str
+    position: float
+    remnant_x: float
+    remnant_y: float
+    remnant_width: float
+    remnant_height: float
+
+    @property
+    def area(self):
+        return self.remnant_width * self.remnant_height
+
+
+@dataclass(frozen=True)
 class LayoutSnapshot:
     """A reviewable snapshot of one sheet or remnant."""
 
@@ -39,6 +55,7 @@ class LayoutSnapshot:
     output_file: str = ""
     thickness: float | None = None
     material: str = ""
+    guillotine_cut: GuillotineCut | None = None
 
 
 @dataclass(frozen=True)
@@ -71,6 +88,117 @@ class _FreeRectangle:
     @property
     def area(self):
         return self.width * self.height
+
+
+def calculate_guillotine_cut(layout, orientation):
+    """Build the safe outer cut for an orientation from current placements."""
+    if orientation not in {"horizontal", "vertical"}:
+        raise ValueError(f"Неизвестное направление реза: {orientation}")
+    if not layout.placements:
+        return None
+
+    if orientation == "horizontal":
+        position = max(item.y + item.height for item in layout.placements)
+        remaining = max(0.0, layout.height - position)
+        return GuillotineCut(
+            orientation=orientation,
+            position=position,
+            remnant_x=0.0,
+            remnant_y=position,
+            remnant_width=layout.width,
+            remnant_height=remaining,
+        )
+
+    position = max(item.x + item.width for item in layout.placements)
+    remaining = max(0.0, layout.width - position)
+    return GuillotineCut(
+        orientation=orientation,
+        position=position,
+        remnant_x=position,
+        remnant_y=0.0,
+        remnant_width=remaining,
+        remnant_height=layout.height,
+    )
+
+
+def select_guillotine_cut(layout, orientation=None):
+    """Select a cut, defaulting to the candidate with the largest remnant."""
+    if orientation is not None:
+        return calculate_guillotine_cut(layout, orientation)
+    candidates = tuple(
+        cut for cut in (
+            calculate_guillotine_cut(layout, "horizontal"),
+            calculate_guillotine_cut(layout, "vertical"),
+        )
+        if cut is not None
+    )
+    if not candidates:
+        return None
+
+    def score(cut):
+        usable = (
+            min(cut.remnant_width, cut.remnant_height) >= 60
+            and max(cut.remnant_width, cut.remnant_height) >= 1000
+        )
+        return usable, cut.area, cut.orientation == "horizontal"
+
+    return max(
+        candidates,
+        key=score,
+    )
+
+
+def refresh_guillotine_cut(layout):
+    """Recalculate cut geometry while preserving the operator's direction."""
+    orientation = (
+        layout.guillotine_cut.orientation
+        if layout.guillotine_cut is not None
+        else None
+    )
+    cut = select_guillotine_cut(layout, orientation)
+    if cut is None and orientation is not None:
+        cut = select_guillotine_cut(layout)
+    return replace(layout, guillotine_cut=cut)
+
+
+def refresh_guillotine_cuts(layouts):
+    return tuple(refresh_guillotine_cut(layout) for layout in layouts)
+
+
+def toggle_guillotine_cut(layouts, layout_id):
+    """Switch one layout between horizontal and vertical guillotine cuts."""
+    edited = []
+    found = False
+    for layout in layouts:
+        if layout.layout_id != layout_id:
+            edited.append(layout)
+            continue
+        found = True
+        current = refresh_guillotine_cut(layout).guillotine_cut
+        orientation = (
+            "vertical"
+            if current is None or current.orientation == "horizontal"
+            else "horizontal"
+        )
+        cut = calculate_guillotine_cut(layout, orientation)
+        edited.append(replace(layout, guillotine_cut=cut))
+    if not found:
+        raise ValueError(f"Не найдена карта {layout_id}")
+    return tuple(edited)
+
+
+def guillotine_remnant(layout, minimum_width=60, minimum_length=1000):
+    """Return the selected stock remnant, or ``None`` if it is too small."""
+    cut = refresh_guillotine_cut(layout).guillotine_cut
+    if cut is None:
+        return None
+    width = cut.remnant_width
+    height = cut.remnant_height
+    if min(width, height) < minimum_width:
+        return None
+    if max(width, height) < minimum_length:
+        return None
+    return max(width, height), min(width, height)
 
 
 def calculate_layout_metrics(layouts: Iterable[LayoutSnapshot]):
@@ -145,7 +273,7 @@ def move_placement(layouts, placement_id, target_layout_id, x, y):
             target_layout,
             placements=target_layout.placements + (moved,),
         )
-    return tuple(edited)
+    return refresh_guillotine_cuts(edited)
 
 
 def snap_placement(
@@ -507,18 +635,10 @@ def repack_unlocked(layouts, locked_ids):
             free_by_layout[layout_index], packed)
 
     candidate_layouts = tuple(
-        LayoutSnapshot(
-            layout_id=layout.layout_id,
-            width=layout.width,
-            height=layout.height,
+        refresh_guillotine_cut(replace(
+            layout,
             placements=tuple(locked_by_layout[index]),
-            material_key=layout.material_key,
-            container_type=layout.container_type,
-            container_id=layout.container_id,
-            output_file=layout.output_file,
-            thickness=layout.thickness,
-            material=layout.material,
-        )
+        ))
         for index, layout in enumerate(original_layouts)
         if locked_by_layout[index]
     )

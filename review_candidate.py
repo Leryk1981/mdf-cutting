@@ -6,10 +6,12 @@ from pathlib import Path
 from .dxf_generator import (
     add_detail_to_sheet,
     add_details_list,
+    add_guillotine_cut,
     add_layout_filename_title,
     add_sheet_outline,
     create_new_dxf,
 )
+from .layout_review import guillotine_remnant, refresh_guillotine_cut
 from .remnants import RemnantsManager
 
 
@@ -80,11 +82,12 @@ def build_material_ledger(materials_df, layouts, margin, kerf):
         generated_remnants = [
             remnant
             for layout in material_layouts
-            for remnant in calculate_layout_remnants(
+            for remnant in [guillotine_remnant(
                 layout,
                 manager.min_remnant_width,
                 manager.min_remnant_length,
-            )
+            )]
+            if remnant is not None
         ]
         whole_sheet_mask = (
             (updated["thickness_mm"] == thickness)
@@ -120,6 +123,7 @@ def render_candidate_dxf(layouts, details_df, output_dir, margin, kerf):
     written_paths = []
 
     for layout in layouts:
+        layout = refresh_guillotine_cut(layout)
         material_details = details_df[
             (details_df["thickness_mm"] == layout.thickness)
             & (details_df["material"] == layout.material)
@@ -154,6 +158,7 @@ def render_candidate_dxf(layouts, details_df, output_dir, margin, kerf):
             if detail_info:
                 details_list.append(detail_info)
 
+        add_guillotine_cut(modelspace, layout.guillotine_cut, margin)
         add_layout_filename_title(
             modelspace, original_length, original_width, filename)
         add_details_list(modelspace, original_width, details_list)
