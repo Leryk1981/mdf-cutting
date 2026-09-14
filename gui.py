@@ -2,9 +2,7 @@ import os
 import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import pandas as pd
 import threading
-import numpy as np
 
 from packer.config import logger, setup_logging
 from packer.constants import (
@@ -15,7 +13,10 @@ from packer.constants import (
     SUPPORTED_ENCODINGS
 )
 from packer.cleanup import CleanupManager
-from packer.remnants import RemnantsManager
+from packer.operator_review import (
+    count_material_remnants,
+    finalize_materials_draft,
+)
 from packer.packing import pack_and_generate_dxf
 from packer.utils import (
     set_log_level,
@@ -36,7 +37,6 @@ class CuttingAppGUI:
         self.root.minsize(800, 600)
 
         self.cleanup_manager = CleanupManager()
-        self.remnants_manager = RemnantsManager()
         self.cutting_thread = None  # Атрибут для хранения потока
 
         # Пути по умолчанию
@@ -245,7 +245,7 @@ class CuttingAppGUI:
             details_path = self.details_entry.get()
             materials_path = self.materials_entry.get()
             pattern_dir = self.pattern_dir_entry.get()
-            output_dir = self.output_dir_entry.get()
+            output_dir = os.path.abspath(self.output_dir_entry.get())
 
             # Проверяем наличие всех необходимых файлов и директорий
             if (os.path.isfile(details_path) and
@@ -350,10 +350,6 @@ class CuttingAppGUI:
             margin = self.margin_var.get()
             kerf = self.kerf_var.get()
 
-            # Создаем менеджер остатков
-            remnants_manager = RemnantsManager(
-                margin=int(margin), kerf=int(kerf))
-
             # Читаем CSV файлы
             details_df, materials_df = read_csv_files(
                 details_path, materials_path, SUPPORTED_ENCODINGS)
@@ -402,103 +398,40 @@ class CuttingAppGUI:
             current_dir = os.getcwd()
             os.chdir(output_dir)
 
-            # Запускаем раскрой
-            logger.info("Начинается процесс раскроя")
-            packers_by_material, total_used_sheets, layout_count = pack_and_generate_dxf(
-                details_df, materials_df, pattern_dir, int(margin), int(kerf))
+            draft_materials_path = os.path.join(
+                output_dir, "updated_materials.pending.csv")
+            published_materials_path = os.path.join(
+                output_dir, "updated_materials.csv")
 
-            # Обновляем таблицу материалов с учетом использованных листов и остатков
-            updated_materials_df = materials_df.copy()
-
-            # Проходимся по всем упаковщикам
-            for material_key, packer in packers_by_material.items():  # This line caused the error
-                try:
-                    # Обрабатываем разные типы ключей (строка или число)
-                    if isinstance(material_key, (float, int)) or (
-                        hasattr(material_key, 'dtype') and
-                        isinstance(material_key.dtype, (np.float64, np.int64))
-                    ):
-                        # Если ключ - число, то толщина = ключ, материал = 'S' по умолчанию
-                        thickness = float(material_key)
-                        material = 'S'
-                        logger.info(
-                            f"Обработка числового ключа: {material_key} -> толщина={thickness}, материал={material}")
-                    else:
-                        # Если ключ - строка, разбиваем его на толщину и материал
-                        key_parts = str(material_key).split('_', 1)
-                        if len(key_parts) != 2:
-                            logger.warning(
-                                f"Некорректный ключ материала: {material_key}")
-                            # Пробуем преобразовать в число
-                            thickness = float(material_key)
-                            material = 'S'
-                        else:
-                            thickness = float(key_parts[0])
-                            material = key_parts[1]
-
-                    if thickness <= 0:
-                        logger.warning(
-                            f"Пропуск материала с неположительной толщиной: {thickness}")
-                        continue
-
-                    logger.info(
-                        f"Обработка остатков для комбинации: толщина={thickness}, материал={material}")
-
-                    # Находим подходящие листы материала для этой комбинации
-                    material_mask = (materials_df['thickness_mm'] == thickness) & (
-                        materials_df['material'] == material)
-                    material_sheets = materials_df[material_mask]
-
-                    if material_sheets.empty:
-                        logger.warning(
-                            f"Не найдены материалы с комбинацией: толщина={thickness}, материал={material}")
-                        continue
-
-                    # Получаем размеры листа для этой комбинации
-                    sheet_length = float(
-                        material_sheets['sheet_length_mm'].iloc[0])
-                    sheet_width = float(
-                        material_sheets['sheet_width_mm'].iloc[0])
-
-                    # Проверяем корректность размеров листа
-                    if sheet_length <= 0 or sheet_width <= 0:
-                        logger.warning(
-                            f"Некорректные размеры листа с комбинацией: толщина={thickness}, материал={material}: {sheet_length}x{sheet_width}")
-                        continue
-
-                    # Рассчитываем количество использованных листов этой комбинации
-                    used_sheets = 0
-                    for bin_idx, bin_rects in enumerate(packer):
-                        if bin_rects:  # Если в контейнере есть прямоугольники
-                            used_sheets += 1
-
-                    # Обновляем таблицу для этой комбинации
-                    logger.info(
-                        f"Обновление таблицы для комбинации: толщина={thickness}, материал={material}. Использовано листов: {used_sheets}")
-                    updated_materials_df = remnants_manager.update_material_table(
-                        updated_materials_df, packer, thickness, material, used_sheets,
-                        sheet_length, sheet_width)
-
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка при обработке остатков для ключа {material_key}: {str(e)}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-
-            # Сохраняем обновленную таблицу материалов
-            remnants_manager.save_material_table(
-                updated_materials_df, os.path.join(output_dir, "updated_materials.csv"))
-
-            # Возвращаемся в исходную директорию
-            os.chdir(current_dir)
+            try:
+                # Ядро рассчитывает склад один раз и пишет его в черновик.
+                logger.info("Начинается процесс раскроя")
+                _, total_used_sheets, layout_count = pack_and_generate_dxf(
+                    details_df,
+                    materials_df,
+                    pattern_dir,
+                    int(margin),
+                    int(kerf),
+                    materials_output_path=draft_materials_path,
+                )
+                remnant_count = count_material_remnants(draft_materials_path)
+            finally:
+                os.chdir(current_dir)
 
             # Показываем результаты
             logger.info(f"Создано карт раскроя: {layout_count}")
 
-            self.root.after(0, lambda: messagebox.showinfo("Готово",
-                                                           f"Создано карт раскроя: {layout_count}\n"
-                                                           f"Обновлённый файл материалов: {os.path.join(output_dir, 'updated_materials.csv')}\n\n"
-                                                           f"Файлы сохранены в: {output_dir}"))
+            self.root.after(
+                0,
+                lambda: self._review_cutting_result(
+                    layout_count,
+                    total_used_sheets,
+                    remnant_count,
+                    draft_materials_path,
+                    published_materials_path,
+                    output_dir,
+                ),
+            )
 
             # Очищаем временные файлы если нужно
             if not self.keep_files_var.get():
@@ -518,3 +451,43 @@ class CuttingAppGUI:
         """Завершает процесс раскроя и обновляет интерфейс"""
         self.run_button.config(state="normal")
         self.status_label.config(text="Готов к запуску")
+
+    def _review_cutting_result(
+            self, layout_count, total_used_sheets, remnant_count,
+            draft_materials_path, published_materials_path, output_dir):
+        """Запрашивает утверждение до публикации складской таблицы."""
+        approved = messagebox.askyesno(
+            "Проверка результата раскроя",
+            f"Создано карт раскроя: {layout_count}\n"
+            f"Использовано целых листов: {total_used_sheets}\n"
+            f"Остатков в рассчитанном складе: {remnant_count}\n\n"
+            "Проверьте карты раскроя перед передачей в производство.\n"
+            "Утвердить результат и обновить таблицу материалов?",
+        )
+
+        try:
+            result_path = finalize_materials_draft(
+                draft_materials_path,
+                published_materials_path,
+                approved,
+            )
+        except Exception as error:
+            logger.exception("Не удалось утвердить таблицу материалов")
+            messagebox.showerror(
+                "Ошибка утверждения",
+                f"Таблица материалов не обновлена:\n{error}",
+            )
+            return
+
+        if approved:
+            messagebox.showinfo(
+                "Результат утверждён",
+                f"Таблица материалов обновлена:\n{result_path}\n\n"
+                f"Файлы раскроя: {output_dir}",
+            )
+        else:
+            messagebox.showinfo(
+                "Черновик сохранён",
+                "Рабочая таблица материалов не изменена.\n"
+                f"Черновик расчёта:\n{result_path}",
+            )

@@ -68,7 +68,9 @@ def format_remnant_id(remnant_id):
     return remnant_id
 
 
-def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", margin=DEFAULT_MARGIN, kerf=DEFAULT_KERF):
+def pack_and_generate_dxf(
+        details_df, materials_df, pattern_dir="patterns", margin=DEFAULT_MARGIN,
+        kerf=DEFAULT_KERF, materials_output_path="updated_materials.csv"):
     """
     Упаковывает детали и генерирует DXF файлы с приоритетом остатков.
     Гарантирует сохранение оригинальных remnant_id при создании карт раскроя.
@@ -79,6 +81,8 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
         pattern_dir: директория с узорами
         margin: отступ от края листа (мм)
         kerf: диаметр фрезы (мм)
+        materials_output_path: путь для рассчитанной таблицы материалов. GUI
+            передаёт путь черновика и публикует его после решения оператора.
 
     Returns:
         tuple: (словарь упаковщиков, количество использованных листов, количество карт раскроя)
@@ -574,7 +578,7 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
 
     # Сохраняем обновленную таблицу материалов
     remnants_manager.save_material_table(
-        current_materials_df, "updated_materials.csv")
+        current_materials_df, materials_output_path)
 
     logger.info(
         f"Упаковка завершена. Всего листов: {total_used_sheets}, карт раскроя: {layout_count}")
