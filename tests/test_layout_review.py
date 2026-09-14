@@ -6,10 +6,38 @@ from packer.layout_review import (
     move_placement,
     repack_unlocked,
     rotate_placement,
+    snap_placement,
 )
 
 
 class LayoutReviewTests(unittest.TestCase):
+    def test_snap_aligns_moving_edge_to_neighbour_without_overlap(self):
+        layouts = (LayoutSnapshot(
+            "sheet-1", 200, 100,
+            (
+                Placement("A", 0, 0, 50, 50),
+                Placement("B", 100, 0, 50, 50),
+            ),
+        ),)
+
+        x, y = snap_placement(
+            layouts, "A", "sheet-1", 47, 2, tolerance=6)
+        moved = move_placement(layouts, "A", "sheet-1", x, y)
+
+        self.assertEqual((x, y), (50, 0))
+        self.assertEqual(moved[0].placements[0].x, 50)
+
+    def test_snap_uses_sheet_edges(self):
+        layouts = (LayoutSnapshot(
+            "sheet-1", 200, 100,
+            (Placement("A", 20, 20, 50, 50),),
+        ),)
+
+        x, y = snap_placement(
+            layouts, "A", "sheet-1", 147, 49, tolerance=5)
+
+        self.assertEqual((x, y), (150, 50))
+
     def test_move_rejects_collision_and_preserves_original(self):
         layouts = (LayoutSnapshot(
             "sheet-1", 100, 100,

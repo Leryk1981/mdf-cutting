@@ -148,6 +148,68 @@ def move_placement(layouts, placement_id, target_layout_id, x, y):
     return tuple(edited)
 
 
+def snap_placement(
+        layouts, placement_id, target_layout_id, x, y, tolerance=12):
+    """Snap a proposed position to sheet or neighbour edges when valid."""
+    target_layout = next(
+        (layout for layout in layouts if layout.layout_id == target_layout_id),
+        None,
+    )
+    if target_layout is None:
+        raise ValueError(f"Не найдена карта {target_layout_id}")
+    _source_layout, placement = next(
+        ((layout, item) for layout in layouts for item in layout.placements
+         if item.placement_id == placement_id),
+        (None, None),
+    )
+    if placement is None:
+        raise ValueError(f"Не найдена деталь {placement_id}")
+
+    x_targets = {0.0, target_layout.width - placement.width}
+    y_targets = {0.0, target_layout.height - placement.height}
+    for other in target_layout.placements:
+        if other.placement_id == placement_id:
+            continue
+        x_targets.update({
+            other.x - placement.width,
+            other.x + other.width,
+        })
+        y_targets.update({
+            other.y - placement.height,
+            other.y + other.height,
+        })
+
+    nearby_x = {
+        target for target in x_targets if abs(target - x) <= tolerance}
+    nearby_y = {
+        target for target in y_targets if abs(target - y) <= tolerance}
+    x_candidates = nearby_x or {float(x)}
+    y_candidates = nearby_y or {float(y)}
+    candidates = sorted(
+        ((candidate_x, candidate_y)
+         for candidate_x in x_candidates
+         for candidate_y in y_candidates),
+        key=lambda point: (
+            abs(point[0] - x) + abs(point[1] - y),
+            abs(point[0] - x),
+            abs(point[1] - y),
+        ),
+    )
+    for candidate_x, candidate_y in candidates:
+        try:
+            move_placement(
+                layouts,
+                placement_id,
+                target_layout_id,
+                candidate_x,
+                candidate_y,
+            )
+        except ValueError:
+            continue
+        return candidate_x, candidate_y
+    return float(x), float(y)
+
+
 def rotate_placement(layouts, placement_id):
     """Rotate one placement by 90 degrees around its current center."""
     for layout in layouts:
