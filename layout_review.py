@@ -210,6 +210,120 @@ def snap_placement(
     return float(x), float(y)
 
 
+def transfer_fit(layouts, placement_id, target_layout_id):
+    """Return ``direct``, ``rotated``, or ``None`` for a target layout."""
+    layouts = tuple(layouts)
+    target = next(
+        (layout for layout in layouts if layout.layout_id == target_layout_id),
+        None,
+    )
+    source, placement = _find_layout_placement(layouts, placement_id)
+    if target is None or source is None:
+        return None
+    if source.material_key != target.material_key:
+        return None
+    for was_rotated, oriented, oriented_layouts in _transfer_orientations(
+            layouts, placement_id):
+        for x, y in _alignment_positions(target, oriented):
+            try:
+                move_placement(
+                    oriented_layouts, placement_id, target_layout_id, x, y)
+                return "rotated" if was_rotated else "direct"
+            except ValueError:
+                continue
+    return None
+
+
+def transfer_placement_at(
+        layouts, placement_id, target_layout_id, center_x, center_y,
+        tolerance=12):
+    """Place at the requested target point, rotating automatically if needed."""
+    layouts = tuple(layouts)
+    source, _placement = _find_layout_placement(layouts, placement_id)
+    target = next(
+        (layout for layout in layouts if layout.layout_id == target_layout_id),
+        None,
+    )
+    if source is None or target is None:
+        raise ValueError("Не найдена деталь или целевая карта")
+    if source.material_key != target.material_key:
+        raise ValueError("Целевая карта имеет другой материал или толщину")
+
+    for was_rotated, oriented, oriented_layouts in _transfer_orientations(
+            layouts, placement_id):
+        x = round(center_x - oriented.width / 2)
+        y = round(center_y - oriented.height / 2)
+        x, y = snap_placement(
+            oriented_layouts,
+            placement_id,
+            target_layout_id,
+            x,
+            y,
+            tolerance,
+        )
+        try:
+            edited = move_placement(
+                oriented_layouts, placement_id, target_layout_id, x, y)
+            return edited, was_rotated
+        except ValueError:
+            continue
+    raise ValueError(
+        "В выбранной точке деталь не помещается даже после поворота")
+
+
+def _find_layout_placement(layouts, placement_id):
+    for layout in layouts:
+        for placement in layout.placements:
+            if placement.placement_id == placement_id:
+                return layout, placement
+    return None, None
+
+
+def _transfer_orientations(layouts, placement_id):
+    _source, placement = _find_layout_placement(layouts, placement_id)
+    if placement is None:
+        return ()
+    orientations = [(False, placement, layouts)]
+    if abs(placement.width - placement.height) <= _EPSILON:
+        return tuple(orientations)
+    rotated = replace(
+        placement,
+        width=placement.height,
+        height=placement.width,
+        rotated=not placement.rotated,
+    )
+    rotated_layouts = tuple(
+        replace(
+            layout,
+            placements=tuple(
+                rotated if item.placement_id == placement_id else item
+                for item in layout.placements
+            ),
+        )
+        for layout in layouts
+    )
+    orientations.append((True, rotated, rotated_layouts))
+    return tuple(orientations)
+
+
+def _alignment_positions(layout, placement):
+    x_positions = {0, layout.width - placement.width}
+    y_positions = {0, layout.height - placement.height}
+    for other in layout.placements:
+        if other.placement_id == placement.placement_id:
+            continue
+        x_positions.update({
+            other.x - placement.width,
+            other.x + other.width,
+        })
+        y_positions.update({
+            other.y - placement.height,
+            other.y + other.height,
+        })
+    return tuple(
+        (x, y) for x in sorted(x_positions) for y in sorted(y_positions))
+
+
 def rotate_placement(layouts, placement_id):
     """Rotate and find the nearest valid aligned position on the same layout."""
     for layout in layouts:

@@ -13,6 +13,8 @@ from .layout_review import (
     repack_unlocked,
     rotate_placement,
     snap_placement,
+    transfer_fit,
+    transfer_placement_at,
 )
 from .review_candidate import publish_candidate_outputs, write_candidate_outputs
 
@@ -134,8 +136,15 @@ class OperatorReviewDialog:
         self._button(right, "Отменить действие", self._undo)
         self._button(right, "Вернуть исходный раскрой", self._reset)
         ttk.Separator(right).pack(fill="x", pady=10)
-        self._button(right, "Переупаковать незакреплённые", self._auto_repack)
+        self._button(right, "Пересчитать остальные детали", self._auto_repack)
         self._button(right, "Открыть DXF текущего варианта", self._open_preview)
+        ttk.Label(
+            right,
+            text=("Ручные перемещения учитываются сразу и закрепляются. "
+                  "Повторно запускать раскрой не нужно: пересчитайте остальные "
+                  "детали и нажмите «Сохранить и завершить»."),
+            wraplength=250, justify="left", padding=(0, 10, 0, 0),
+        ).pack(fill="x")
         self.metrics_label = ttk.Label(
             right, wraplength=250, justify="left", padding=(0, 12, 0, 0))
         self.metrics_label.pack(fill="x")
@@ -156,7 +165,7 @@ class OperatorReviewDialog:
             actions, text="Утвердить исходный", command=self._approve_original,
         ).pack(side="right", padx=(8, 0))
         ttk.Button(
-            actions, text="Утвердить текущую карту", command=self._approve_current,
+            actions, text="Сохранить и завершить", command=self._approve_current,
         ).pack(side="right")
         self._refresh_navigation()
         self._render()
@@ -180,19 +189,27 @@ class OperatorReviewDialog:
             used = sum(item.area for item in layout.placements)
             utilization = used / (layout.width * layout.height)
             kind = "Остаток" if layout.container_type == "remnant" else "Лист"
+            fit = None
+            fit_mark = ""
+            if self.transfer_id is not None:
+                fit = transfer_fit(
+                    self.layouts, self.transfer_id, layout.layout_id)
+                fit_mark = {
+                    "direct": " · входит",
+                    "rotated": " · с поворотом",
+                    None: " · не входит",
+                }[fit]
             self.layout_list.insert(
                 "end", f"{index + 1}. {kind} · {utilization:.0%} · "
-                       f"{len(layout.placements)} дет.")
+                       f"{len(layout.placements)} дет.{fit_mark}")
             if self.transfer_id is not None:
-                source_layout, _placement = self._find_placement(
-                    self.transfer_id)
-                compatible = (
-                    source_layout is not None
-                    and source_layout.material_key == layout.material_key
-                )
                 self.layout_list.itemconfig(
                     index,
-                    foreground="#176b2c" if compatible else "#888888",
+                    foreground={
+                        "direct": "#176b2c",
+                        "rotated": "#a05a00",
+                        None: "#888888",
+                    }[fit],
                 )
             if layout.layout_id == current_id:
                 self.current_index = index
@@ -208,15 +225,21 @@ class OperatorReviewDialog:
         if self.transfer_id is None:
             self.selected_id = None
         else:
-            source_layout, _placement = self._find_placement(self.transfer_id)
             target_layout = self._current_layout()
-            if source_layout.material_key == target_layout.material_key:
+            fit = transfer_fit(
+                self.layouts, self.transfer_id, target_layout.layout_id)
+            if fit == "direct":
                 self._status(
-                    "Шаг 3 из 3: щёлкните по свободному месту на выбранной карте.")
+                    "Шаг 3 из 3: деталь входит без поворота. "
+                    "Щёлкните по свободному месту.")
+            elif fit == "rotated":
+                self._status(
+                    "Шаг 3 из 3: деталь входит только после поворота. "
+                    "Поворот будет выполнен автоматически.")
             else:
                 self._status(
-                    "Эта карта имеет другой материал или толщину. "
-                    "Выберите зелёную строку.", True)
+                    "На этой карте нет подходящего свободного места. "
+                    "Выберите зелёную или жёлтую строку.", True)
         self._render()
 
     def _render(self):
@@ -339,10 +362,12 @@ class OperatorReviewDialog:
             return False
         self._save_undo()
         self.layouts = edited
+        self.locked_ids.add(placement_id)
         self.dirty = self.layouts != self.original_layouts
         self._refresh_navigation()
         self._render()
-        self._status(f"Деталь перемещена в {x:g}; {y:g} мм.")
+        self._status(
+            f"Деталь перемещена в {x:g}; {y:g} мм и автоматически закреплена.")
         return True
 
     def _rotate(self):
@@ -355,10 +380,11 @@ class OperatorReviewDialog:
             return
         self._save_undo()
         self.layouts = edited
+        self.locked_ids.add(self.selected_id)
         self.dirty = True
         self._render()
         self._update_metrics()
-        self._status("Деталь повёрнута на 90°.")
+        self._status("Деталь повёрнута на 90° и автоматически закреплена.")
 
     def _toggle_lock(self):
         if self.selected_id is None:
@@ -392,7 +418,8 @@ class OperatorReviewDialog:
         self.canvas.configure(cursor="crosshair")
         self._refresh_navigation()
         self._status(
-            "Шаг 2 из 3: выберите зелёную совместимую карту слева. "
+            "Шаг 2 из 3: зелёная карта принимает деталь как есть, жёлтая — "
+            "после автоматического поворота, серая — не принимает. "
             "Затем щёлкните по свободному месту.")
 
     def _cancel_transfer(self, _event=None):
@@ -406,20 +433,25 @@ class OperatorReviewDialog:
     def _transfer_preview(self, event):
         if self.transfer_id is None:
             return
-        _source_layout, placement = self._find_placement(self.transfer_id)
         model_x, model_y = self._to_model(event.x, event.y)
-        x = round(model_x - placement.width / 2)
-        y = round(model_y - placement.height / 2)
-        x, y = snap_placement(
-            self.layouts, self.transfer_id,
-            self._current_layout().layout_id, x, y)
-        preview = replace(placement, x=x, y=y)
         try:
-            move_placement(
+            edited, _was_rotated = transfer_placement_at(
                 self.layouts, self.transfer_id,
-                self._current_layout().layout_id, x, y)
+                self._current_layout().layout_id, model_x, model_y)
+            _layout, preview = next(
+                (layout, item)
+                for layout in edited
+                for item in layout.placements
+                if item.placement_id == self.transfer_id
+            )
             color = "#2a9d3f"
         except ValueError:
+            _layout, placement = self._find_placement(self.transfer_id)
+            preview = replace(
+                placement,
+                x=round(model_x - placement.width / 2),
+                y=round(model_y - placement.height / 2),
+            )
             color = "#ef233c"
         self._render()
         self.canvas.create_rectangle(
@@ -428,28 +460,47 @@ class OperatorReviewDialog:
 
     def _finish_transfer(self, event):
         placement_id = self.transfer_id
-        _layout, placement = self._find_placement(placement_id)
         model_x, model_y = self._to_model(event.x, event.y)
-        x = round(model_x - placement.width / 2)
-        y = round(model_y - placement.height / 2)
-        x, y = snap_placement(
-            self.layouts, placement_id, self._current_layout().layout_id, x, y)
-        moved = self._apply_move(
-            placement_id, self._current_layout().layout_id, x, y)
-        if moved:
+        try:
+            edited, was_rotated = transfer_placement_at(
+                self.layouts,
+                placement_id,
+                self._current_layout().layout_id,
+                model_x,
+                model_y,
+            )
+        except ValueError as error:
+            self._status(f"{error}. Выберите другую точку или нажмите Esc.", True)
+            return
+        self._save_undo()
+        self.layouts = edited
+        self.locked_ids.add(placement_id)
+        self.dirty = self.layouts != self.original_layouts
+        self.selected_id = placement_id
+        if edited:
             self.transfer_id = None
             self.transfer_button.configure(text="Перенести на другую карту")
             self.canvas.configure(cursor="arrow")
             self._refresh_navigation()
             self._render()
-        else:
+            rotation_text = " с автоматическим поворотом" if was_rotated else ""
             self._status(
-                "Место занято. Выберите другую точку или нажмите Esc.", True)
+                f"Деталь перенесена{rotation_text} и закреплена. "
+                "Повторно запускать раскрой не нужно.")
 
     def _auto_repack(self):
         proposal = repack_unlocked(self.layouts, self.locked_ids)
         if not proposal.feasible:
             self._status(proposal.reason, True)
+            return
+        if proposal.layouts == self.layouts:
+            messagebox.showinfo(
+                "Пересчёт завершён",
+                "Другого допустимого размещения не найдено. "
+                "Ручные переносы уже учтены в текущей карте.",
+                parent=self.window,
+            )
+            self._status("Пересчёт не изменил текущую карту.")
             return
         self._save_undo()
         self.layouts = proposal.layouts

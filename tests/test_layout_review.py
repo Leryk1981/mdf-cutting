@@ -7,10 +7,45 @@ from packer.layout_review import (
     repack_unlocked,
     rotate_placement,
     snap_placement,
+    transfer_fit,
+    transfer_placement_at,
 )
 
 
 class LayoutReviewTests(unittest.TestCase):
+    def test_transfer_fit_distinguishes_direct_rotated_and_impossible(self):
+        layouts = (
+            LayoutSnapshot(
+                "source", 200, 200,
+                (Placement("A", 0, 0, 100, 60, material_key="16_S"),),
+                material_key="16_S",
+            ),
+            LayoutSnapshot("rotated", 80, 120, (), material_key="16_S"),
+            LayoutSnapshot("impossible", 50, 50, (), material_key="16_S"),
+        )
+
+        self.assertEqual(transfer_fit(layouts, "A", "source"), "direct")
+        self.assertEqual(transfer_fit(layouts, "A", "rotated"), "rotated")
+        self.assertIsNone(transfer_fit(layouts, "A", "impossible"))
+
+    def test_transfer_can_rotate_automatically_on_target_map(self):
+        layouts = (
+            LayoutSnapshot(
+                "source", 200, 200,
+                (Placement("A", 0, 0, 100, 60, material_key="16_S"),),
+                material_key="16_S",
+            ),
+            LayoutSnapshot("target", 80, 120, (), material_key="16_S"),
+        )
+
+        edited, was_rotated = transfer_placement_at(
+            layouts, "A", "target", center_x=40, center_y=60)
+        moved = edited[1].placements[0]
+
+        self.assertTrue(was_rotated)
+        self.assertEqual((moved.width, moved.height), (60, 100))
+        self.assertEqual((moved.x, moved.y), (0, 0))
+
     def test_snap_aligns_moving_edge_to_neighbour_without_overlap(self):
         layouts = (LayoutSnapshot(
             "sheet-1", 200, 100,
