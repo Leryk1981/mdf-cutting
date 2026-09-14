@@ -356,6 +356,14 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
 
         logger.info(f"Использовано целых листов: {used_full_sheets}")
 
+        # Compute leftovers from the real container that was packed.  A
+        # consumed remnant must never be recalculated using full-sheet size.
+        generated_remnants = []
+        for _container_type, _container_id, used_packer in all_packers:
+            generated_remnants.extend(remnants_manager.calculate_remnants(
+                used_packer, used_packer[0].width + 2 * margin,
+                used_packer[0].height + 2 * margin, margin))
+
         # ФАЗА 3: Создание DXF файлов и финального упаковщика
         logger.info("\nФаза 3: Создание DXF файлов")
 
@@ -543,13 +551,14 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
             # Обновляем таблицу с передачей размеров листа
             updated_materials = remnants_manager.update_material_table(
                 current_materials_df, final_packer, thickness, material,
-                used_full_sheets, sheet_length, sheet_width)
+                used_full_sheets, sheet_length, sheet_width, generated_remnants)
             current_materials_df = updated_materials
         else:
             logger.warning(
                 f"Не найдены стандартные листы для толщины {thickness} и материала {material}")
             updated_materials = remnants_manager.update_material_table(
-                current_materials_df, final_packer, thickness, material, used_full_sheets)
+                current_materials_df, final_packer, thickness, material, used_full_sheets,
+                remnants=generated_remnants)
             current_materials_df = updated_materials
 
     # Перед сохранением таблицы проверяем наличие колонки remnant_id

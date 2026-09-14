@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from uuid import uuid4
 from .config import logger
 from rectpack import newPacker
 
@@ -61,49 +62,37 @@ class RemnantsManager:
                 f"Размеры листа слишком малы с учётом отступов: {sheet_length}x{sheet_width}")
             return remnants
 
-        bin_width = sheet_length - 2 * margin
-        bin_height = sheet_width - 2 * margin
-
-        for bin_num, bin_rects in enumerate(packer):
-            if not bin_rects:
+        for bin_num, packed_bin in enumerate(packer):
+            if not packed_bin:
                 continue
 
-            # Инициализируем список свободных прямоугольников
-            # x, y, width, height
-            free_spaces = [(0, 0, bin_width, bin_height)]
-            for rect in bin_rects:
-                new_spaces = []
-                for fx, fy, fw, fh in free_spaces:
-                    # Проверяем пересечение с текущей деталью
-                    if (rect.x >= fx + fw or rect.y >= fy + fh or
-                            rect.x + rect.width <= fx or rect.y + rect.height <= fy):
-                        new_spaces.append((fx, fy, fw, fh))  # Нет пересечения
-                    else:
-                        # Разделяем свободное пространство
-                        if rect.y > fy:  # Сверху
-                            new_spaces.append((fx, fy, fw, rect.y - fy))
-                        if rect.x + rect.width < fx + fw:  # Справа
-                            new_spaces.append(
-                                (rect.x + rect.width, fy, fx + fw - (rect.x + rect.width), fh))
-                        if rect.y + rect.height < fy + fh:  # Снизу
-                            new_spaces.append(
-                                (fx, rect.y + rect.height, fw, fy + fh - (rect.y + rect.height)))
-                        if rect.x > fx:  # Слева
-                            new_spaces.append((fx, fy, rect.x - fx, fh))
-                free_spaces = new_spaces
+            # Split on every placed-rectangle edge.  Unlike the former
+            # subtraction algorithm, these free cells never overlap.
+            x_edges = sorted({0, packed_bin.width, *(
+                edge for rect in packed_bin for edge in (rect.x, rect.x + rect.width)
+            )})
+            y_edges = sorted({0, packed_bin.height, *(
+                edge for rect in packed_bin for edge in (rect.y, rect.y + rect.height)
+            )})
+            free_spaces = []
+            for x0, x1 in zip(x_edges, x_edges[1:]):
+                for y0, y1 in zip(y_edges, y_edges[1:]):
+                    occupied = any(
+                        rect.x < x1 and rect.x + rect.width > x0 and
+                        rect.y < y1 and rect.y + rect.height > y0
+                        for rect in packed_bin
+                    )
+                    if not occupied:
+                        free_spaces.append((x0, y0, x1 - x0, y1 - y0))
 
             # Фильтруем и добавляем остатки с явным ограничением
             for fx, fy, fw, fh in free_spaces:
                 actual_length = fw
                 actual_width = fh
-                # Строгая фильтрация: минимум 60x1000 мм
-                if actual_length < self.min_remnant_length or actual_width < self.min_remnant_length:
+                if min(actual_length, actual_width) < self.min_remnant_width or \
+                        max(actual_length, actual_width) < self.min_remnant_length:
                     logger.debug(
-                        f"Лист {bin_num}: игнорируется остаток {actual_length}x{actual_width} (меньше {self.min_remnant_length})")
-                    continue
-                if actual_length < self.min_remnant_width or actual_width < self.min_remnant_width:
-                    logger.debug(
-                        f"Лист {bin_num}: игнорируется остаток {actual_length}x{actual_width} (меньше {self.min_remnant_width})")
+                        f"Лист {bin_num}: игнорируется остаток {actual_length}x{actual_width} (меньше 60x1000 мм)")
                     continue
                 # Если длина меньше ширины, меняем местами для консистентности
                 if actual_length < actual_width:
@@ -114,7 +103,8 @@ class RemnantsManager:
 
         return remnants
 
-    def update_material_table(self, materials_df, packer, thickness, material, used_sheets, sheet_length=None, sheet_width=None):
+    def update_material_table(self, materials_df, packer, thickness, material, used_sheets,
+                              sheet_length=None, sheet_width=None, remnants=None):
         """
         Обновляет таблицу материалов с учётом остатков и использованных листов.
 
@@ -202,9 +192,9 @@ class RemnantsManager:
                     logger.warning(
                         f"Не удалось распределить все {used_sheets} листов, осталось {remaining_sheets}")
 
-        # Рассчитываем остатки
-        remnants = self.calculate_remnants(
-            packer, sheet_length, sheet_width, self.margin)
+        if remnants is None:
+            remnants = self.calculate_remnants(
+                packer, sheet_length, sheet_width, self.margin)
         logger.info(f"Найдено {len(remnants)} остатков")
 
         # НЕ удаляем старые остатки автоматически - они должны сохраняться
@@ -222,11 +212,11 @@ class RemnantsManager:
                     'sheet_width_mm': float(remnant_width),
                     'total_quantity': 1,
                     'is_remnant': True,
-                    'remnant_id': None  # NULL для новых остатков
+                    'remnant_id': f"auto-{uuid4().hex}"
                 }
                 remnant_rows.append(remnant_row)
                 logger.info(
-                    f"Добавлен новый остаток: {remnant_length}x{remnant_width}, ID: None (требуется заполнение)")
+                    f"Добавлен новый остаток: {remnant_length}x{remnant_width}")
 
             # Создаем DataFrame из новых остатков
             if remnant_rows:
