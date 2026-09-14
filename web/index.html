@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Раскрой MDF</title>
+  <link rel="stylesheet" href="/static/styles.css?v=3">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Раскрой MDF</h1>
+      <span id="header-status">Подготовка заказа</span>
+    </div>
+    <div class="summary" id="summary" hidden></div>
+  </header>
+
+  <main>
+    <section class="setup card" id="setup-panel">
+      <div class="section-title">
+        <div>
+          <h2>Исходные данные</h2>
+          <p>Проверьте пути и запустите расчёт. Все операции выполняются локально.</p>
+        </div>
+        <button class="quiet" id="toggle-setup" type="button">Свернуть</button>
+      </div>
+      <form id="run-form">
+        <label class="path-field">Таблица деталей<span class="path-control"><input id="details-path" required><button type="button" data-browse="details" data-target="details-path">Обзор</button></span></label>
+        <label class="path-field">Таблица склада<span class="path-control"><input id="materials-path" required><button type="button" data-browse="materials" data-target="materials-path">Обзор</button></span></label>
+        <label class="path-field full">Папка результатов<span class="path-control"><input id="output-dir" required><button type="button" data-browse="output" data-target="output-dir">Обзор</button></span></label>
+        <label class="short">Отступ, мм<input id="margin" type="number" min="0" max="100" required></label>
+        <label class="short">Пропил, мм<input id="kerf" type="number" min="0" max="30" required></label>
+        <button class="primary run" id="run-button" type="submit">Рассчитать раскрой</button>
+      </form>
+    </section>
+
+    <section class="workspace" id="workspace" hidden>
+      <aside class="maps card">
+        <div class="panel-heading">
+          <h2>Карты</h2>
+          <span id="map-count"></span>
+        </div>
+        <div id="map-list" class="map-list"></div>
+      </aside>
+
+      <section class="drawing card">
+        <div class="drawing-heading">
+          <div>
+            <h2 id="map-title">Карта</h2>
+            <p id="map-subtitle"></p>
+          </div>
+          <div class="zoom-actions">
+            <button class="quiet" id="zoom-out" title="Уменьшить">−</button>
+            <button class="quiet" id="zoom-reset">По размеру</button>
+            <button class="quiet" id="zoom-in" title="Увеличить">+</button>
+          </div>
+        </div>
+        <div class="svg-wrap" id="svg-wrap">
+          <svg id="layout-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Карта раскроя"></svg>
+          <div class="empty-map" id="empty-map" hidden>Выберите карту</div>
+          <div class="drag-status" id="drag-status" hidden></div>
+        </div>
+        <div class="legend">
+          <span><i class="detail-swatch"></i>деталь</span>
+          <span><i class="manual-swatch"></i>ручная правка</span>
+          <span><i class="locked-swatch"></i>закреплена</span>
+          <span><i class="remnant-swatch"></i>остаток</span>
+          <span><i class="cut-swatch"></i>гильотинный рез</span>
+        </div>
+      </section>
+
+      <aside class="properties card">
+        <section>
+          <h2>Выбранная деталь</h2>
+          <div id="detail-info" class="info muted">Щёлкните по детали на карте.</div>
+          <div class="button-grid">
+            <button id="rotate-button" disabled>Повернуть 90°</button>
+            <button id="lock-button" disabled>Закрепить</button>
+            <button id="transfer-button" disabled>Перенести</button>
+          </div>
+        </section>
+        <section>
+          <h2>План гильотинных резов</h2>
+          <div id="cut-info" class="info"></div>
+          <div class="button-grid cut-actions">
+            <button id="cut-less-button">− рез</button>
+            <button id="cut-more-button">+ рез</button>
+            <button id="cut-button" class="wide">Другой первый рез</button>
+          </div>
+        </section>
+        <section>
+          <h2>Действия</h2>
+          <div class="button-grid">
+            <button id="undo-button">Отменить</button>
+            <button id="reset-button">Исходный вариант</button>
+            <button id="repack-button" class="wide" title="Сохраняет ручные правки и пытается освободить карту">Уплотнить остальные детали</button>
+          </div>
+        </section>
+        <section class="approval">
+          <button id="approve-button" class="primary">Сохранить и завершить</button>
+          <button id="approve-original-button" class="quiet">Утвердить исходный</button>
+          <button id="open-output-button" class="quiet">Открыть папку результатов</button>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="busy" class="busy" hidden><div class="spinner"></div><span>Выполняется расчёт…</span></div>
+  <script src="/static/app.js?v=4"></script>
+</body>
+</html>

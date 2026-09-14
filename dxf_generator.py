@@ -451,6 +451,16 @@ def create_new_dxf():
     doc.layers.new("details", dxfattribs={"color": 7})
     doc.layers.new("work_area", dxfattribs={"color": 40})
     doc.layers.new("cut", dxfattribs={"color": 3, "linetype": "CONTINUOUS"})
+    if "DASHED" not in doc.linetypes:
+        doc.linetypes.add(
+            "DASHED",
+            pattern=[0.6, 0.3, -0.3],
+            description="Guillotine cut",
+        )
+    doc.layers.new(
+        "guillotine_cut",
+        dxfattribs={"color": 6, "linetype": "DASHED"},
+    )
 
     # Слои для подписей
     doc.layers.new("TITLE", dxfattribs={"color": 2})
@@ -542,6 +552,80 @@ def add_sheet_outline(msp, sheet_length, sheet_width, margin):
         ], dxfattribs={'layer': 'work_area'})
     except Exception as e:
         logger.error(f"Ошибка при добавлении контуров: {str(e)}")
+
+
+def add_guillotine_cut(msp, cut, margin):
+    """Draw the selected stock-separating cut in model coordinates."""
+    if cut is None:
+        return None
+    if cut.orientation == "horizontal":
+        start = (margin, margin + cut.position)
+        end = (margin + cut.remnant_width, margin + cut.position)
+    elif cut.orientation == "vertical":
+        start = (margin + cut.position, margin)
+        end = (margin + cut.position, margin + cut.remnant_height)
+    else:
+        raise ValueError(f"Неизвестное направление реза: {cut.orientation}")
+    return msp.add_line(
+        start,
+        end,
+        dxfattribs={
+            "layer": "guillotine_cut",
+            "color": 6,
+            "linetype": "DASHED",
+            "ltscale": 20,
+        },
+    )
+
+
+def add_guillotine_plan(msp, plan, margin):
+    """Draw every ordered segment of a guillotine cut tree."""
+    if plan is None:
+        return ()
+    entities = []
+    for cut in plan.cuts:
+        if cut.orientation == "horizontal":
+            start = (
+                margin + cut.panel_x,
+                margin + cut.position,
+            )
+            end = (
+                margin + cut.panel_x + cut.panel_width,
+                margin + cut.position,
+            )
+        elif cut.orientation == "vertical":
+            start = (
+                margin + cut.position,
+                margin + cut.panel_y,
+            )
+            end = (
+                margin + cut.position,
+                margin + cut.panel_y + cut.panel_height,
+            )
+        else:
+            raise ValueError(
+                f"Неизвестное направление реза: {cut.orientation}")
+        line = msp.add_line(
+            start,
+            end,
+            dxfattribs={
+                "layer": "guillotine_cut",
+                "color": 6,
+                "linetype": "DASHED",
+                "ltscale": 20,
+            },
+        )
+        label = msp.add_text(
+            str(cut.order),
+            dxfattribs={
+                "layer": "guillotine_cut",
+                "color": 6,
+                "height": 24,
+            },
+        )
+        label.set_placement((start[0] + 6, start[1] + 6))
+        entities.extend((line, label))
+    return tuple(entities)
 
 
 def add_cut_line(msp, x, y, width, height, offset):

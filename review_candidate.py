@@ -1,0 +1,244 @@
+"""Generate isolated DXF and material-ledger outputs for a review proposal."""
+
+import os
+from pathlib import Path
+
+from .dxf_generator import (
+    add_detail_to_sheet,
+    add_details_list,
+    add_guillotine_plan,
+    add_layout_filename_title,
+    add_sheet_outline,
+    create_new_dxf,
+)
+from .layout_review import guillotine_remnants, refresh_guillotine_cut
+from .remnants import RemnantsManager
+
+
+def calculate_layout_remnants(layout, minimum_width=60, minimum_length=1000):
+    """Calculate non-overlapping usable remnants from one layout snapshot."""
+    x_edges = sorted({
+        0,
+        layout.width,
+        *(edge for item in layout.placements
+          for edge in (item.x, item.x + item.width)),
+    })
+    y_edges = sorted({
+        0,
+        layout.height,
+        *(edge for item in layout.placements
+          for edge in (item.y, item.y + item.height)),
+    })
+    free_spaces = []
+    for x0, x1 in zip(x_edges, x_edges[1:]):
+        for y0, y1 in zip(y_edges, y_edges[1:]):
+            occupied = any(
+                item.x < x1 and item.x + item.width > x0
+                and item.y < y1 and item.y + item.height > y0
+                for item in layout.placements
+            )
+            if not occupied:
+                free_spaces.append((x0, y0, x1 - x0, y1 - y0))
+
+    free_spaces = RemnantsManager.merge_adjacent_free_spaces(free_spaces)
+    remnants = []
+    for _x, _y, width, height in free_spaces:
+        if min(width, height) < minimum_width:
+            continue
+        if max(width, height) < minimum_length:
+            continue
+        remnants.append((max(width, height), min(width, height)))
+    return remnants
+
+
+def build_material_ledger(materials_df, layouts, margin, kerf):
+    """Reconcile inventory against the exact containers in a proposal."""
+    manager = RemnantsManager(margin=margin, kerf=kerf)
+    updated = materials_df.copy()
+    grouped_layouts = {}
+    for layout in layouts:
+        key = (layout.thickness, layout.material)
+        if layout.thickness is None or not layout.material:
+            raise ValueError(f"У карты {layout.layout_id} нет данных материала")
+        grouped_layouts.setdefault(key, []).append(layout)
+
+    for (thickness, material), material_layouts in grouped_layouts.items():
+        consumed_remnants = {
+            layout.container_id
+            for layout in material_layouts
+            if layout.container_type == "remnant"
+        }
+        if consumed_remnants:
+            mask = (
+                (updated["thickness_mm"] == thickness)
+                & (updated["material"] == material)
+                & (updated["is_remnant"] == True)
+                & (updated["remnant_id"].isin(consumed_remnants))
+            )
+            updated = updated.loc[~mask].copy()
+
+        used_sheets = sum(
+            layout.container_type == "sheet" for layout in material_layouts)
+        generated_remnants = [
+            remnant
+            for layout in material_layouts
+            for remnant in guillotine_remnants(
+                layout,
+                manager.min_remnant_width,
+                manager.min_remnant_length,
+            )
+        ]
+        whole_sheet_mask = (
+            (updated["thickness_mm"] == thickness)
+            & (updated["material"] == material)
+            & (updated["is_remnant"] == False)
+        )
+        whole_sheets = updated.loc[whole_sheet_mask]
+        if not whole_sheets.empty:
+            sheet_length = float(whole_sheets.iloc[0]["sheet_length_mm"])
+            sheet_width = float(whole_sheets.iloc[0]["sheet_width_mm"])
+        else:
+            first_layout = material_layouts[0]
+            sheet_length = first_layout.width + 2 * margin
+            sheet_width = first_layout.height + 2 * margin
+
+        updated = manager.update_material_table(
+            updated,
+            packer=None,
+            thickness=thickness,
+            material=material,
+            used_sheets=used_sheets,
+            sheet_length=sheet_length,
+            sheet_width=sheet_width,
+            remnants=generated_remnants,
+        )
+    return updated
+
+
+def render_candidate_dxf(layouts, details_df, output_dir, margin, kerf):
+    """Render proposal layouts into a separate review directory."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written_paths = []
+
+    for layout in layouts:
+        layout = refresh_guillotine_cut(layout)
+        material_details = details_df[
+            (details_df["thickness_mm"] == layout.thickness)
+            & (details_df["material"] == layout.material)
+        ].reset_index(drop=True)
+        if material_details.empty:
+            raise ValueError(f"Не найдены детали для карты {layout.layout_id}")
+
+        filename = Path(layout.output_file).name
+        if not filename:
+            raise ValueError(f"У карты {layout.layout_id} нет имени DXF")
+        original_length = layout.width + 2 * margin
+        original_width = layout.height + 2 * margin
+        doc, modelspace = create_new_dxf()
+        add_sheet_outline(
+            modelspace, original_length, original_width, margin)
+        details_list = []
+
+        for placement in layout.placements:
+            if placement.source_index is None:
+                raise ValueError(
+                    f"У детали {placement.placement_id} нет ссылки на источник")
+            detail = material_details.iloc[placement.source_index]
+            detail_rect = {
+                "x": placement.x + margin,
+                "y": placement.y + margin,
+                "width": placement.width - kerf,
+                "height": placement.height - kerf,
+                "rotated": placement.rotated,
+            }
+            detail_info = add_detail_to_sheet(
+                modelspace, detail, detail_rect, kerf)
+            if detail_info:
+                details_list.append(detail_info)
+
+        add_guillotine_plan(modelspace, layout.cut_plan, margin)
+        add_layout_filename_title(
+            modelspace, original_length, original_width, filename)
+        add_details_list(modelspace, original_width, details_list)
+        output_path = output_dir / filename
+        doc.saveas(output_path)
+        written_paths.append(output_path)
+
+    return tuple(written_paths)
+
+
+def write_candidate_outputs(
+        layouts, details_df, materials_df, output_dir, margin, kerf):
+    """Write a complete, isolated proposal for visual and ledger review."""
+    output_dir = Path(output_dir)
+    dxf_paths = render_candidate_dxf(
+        layouts, details_df, output_dir, margin, kerf)
+    materials = build_material_ledger(
+        materials_df, layouts, margin, kerf)
+    materials_path = output_dir / "updated_materials.pending.csv"
+    RemnantsManager(margin=margin, kerf=kerf).save_material_table(
+        materials, materials_path)
+    return dxf_paths, materials_path
+
+
+def publish_candidate_outputs(
+        original_layouts, candidate_layouts, candidate_dir,
+        candidate_materials_path, pending_materials_path):
+    """Publish an approved candidate while retaining recoverable originals."""
+    candidate_dir = Path(candidate_dir)
+    pending_materials_path = Path(pending_materials_path)
+    backup_dir = candidate_dir / "original_outputs"
+    backup_dir.mkdir(parents=True, exist_ok=False)
+
+    original_paths = {
+        Path(layout.output_file) for layout in original_layouts
+    }
+    candidate_targets = {
+        Path(layout.output_file) for layout in candidate_layouts
+    }
+    candidate_sources = {
+        target: candidate_dir / target.name for target in candidate_targets
+    }
+    missing = [
+        str(source) for source in candidate_sources.values()
+        if not source.is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            f"Не найдены DXF улучшенного варианта: {', '.join(missing)}")
+    candidate_materials_path = Path(candidate_materials_path)
+    if not candidate_materials_path.is_file():
+        raise FileNotFoundError(
+            f"Не найдена таблица улучшенного варианта: {candidate_materials_path}")
+
+    moved_originals = []
+    published_candidates = []
+    ledger_backup = backup_dir / pending_materials_path.name
+    try:
+        for original_path in original_paths:
+            if original_path.is_file():
+                backup_path = backup_dir / original_path.name
+                os.replace(original_path, backup_path)
+                moved_originals.append((backup_path, original_path))
+
+        for target, source in candidate_sources.items():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(source, target)
+            published_candidates.append((target, source))
+
+        if pending_materials_path.is_file():
+            os.replace(pending_materials_path, ledger_backup)
+        os.replace(candidate_materials_path, pending_materials_path)
+    except Exception:
+        for target, source in reversed(published_candidates):
+            if target.is_file():
+                os.replace(target, source)
+        for backup_path, original_path in reversed(moved_originals):
+            if backup_path.is_file():
+                os.replace(backup_path, original_path)
+        if ledger_backup.is_file() and not pending_materials_path.is_file():
+            os.replace(ledger_backup, pending_materials_path)
+        raise
+
+    return backup_dir

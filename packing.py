@@ -1,4 +1,7 @@
 import os
+from dataclasses import dataclass
+from pathlib import Path
+
 from rectpack import newPacker, MaxRectsBssf
 from .config import logger
 from .patterns import load_patterns
@@ -6,16 +9,39 @@ from .dxf_generator import (
     create_new_dxf,
     add_sheet_outline,
     add_detail_to_sheet,
+    add_guillotine_plan,
     add_layout_filename_title,
     add_details_list
 )
 from .remnants import RemnantsManager
+from .layout_review import (
+    LayoutSnapshot,
+    Placement,
+    guillotine_remnants,
+    refresh_guillotine_cut,
+)
 from .constants import (
     MATERIALS_REQUIRED_COLUMNS,
     DETAILS_REQUIRED_COLUMNS,
     DEFAULT_MARGIN,
     DEFAULT_KERF
 )
+
+
+@dataclass(frozen=True)
+class PackingRunResult:
+    """Packing outputs plus engine-independent layouts for operator review."""
+
+    packers_by_material: dict
+    total_used_sheets: int
+    layout_count: int
+    layouts: tuple[LayoutSnapshot, ...]
+
+    def __iter__(self):
+        """Keep compatibility with the legacy three-value tuple unpacking."""
+        yield self.packers_by_material
+        yield self.total_used_sheets
+        yield self.layout_count
 
 
 def hybrid_sort(rectangles):
@@ -31,6 +57,27 @@ def hybrid_sort(rectangles):
     return (sorted(large, key=lambda x: -(x[0] * x[1])) +
             sorted(medium, key=lambda x: -(x[0] * x[1])) +
             sorted(small, key=lambda x: (-x[0], -x[1])))
+
+
+def build_rectangles_to_pack(material_details, kerf):
+    """Expand quantities into uniquely identified physical rectangles."""
+    rectangles = []
+    detail_index_by_rect_id = {}
+    rect_id = 0
+    for detail_index, detail in material_details.iterrows():
+        packing_width = detail['length_mm'] + kerf
+        packing_height = detail['width_mm'] + kerf
+        if packing_width <= 0 or packing_height <= 0:
+            logger.info(
+                f"Пропуск детали {detail['part_id']}: некорректные размеры "
+                f"{packing_width}x{packing_height}")
+            continue
+        quantity = max(1, int(detail.get('quantity', 1)))
+        for _ in range(quantity):
+            rectangles.append((packing_width, packing_height, rect_id))
+            detail_index_by_rect_id[rect_id] = detail_index
+            rect_id += 1
+    return rectangles, detail_index_by_rect_id
 
 
 def format_remnant_id(remnant_id):
@@ -68,7 +115,9 @@ def format_remnant_id(remnant_id):
     return remnant_id
 
 
-def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", margin=DEFAULT_MARGIN, kerf=DEFAULT_KERF):
+def pack_and_generate_dxf(
+        details_df, materials_df, pattern_dir="patterns", margin=DEFAULT_MARGIN,
+        kerf=DEFAULT_KERF, materials_output_path="updated_materials.csv"):
     """
     Упаковывает детали и генерирует DXF файлы с приоритетом остатков.
     Гарантирует сохранение оригинальных remnant_id при создании карт раскроя.
@@ -79,6 +128,8 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
         pattern_dir: директория с узорами
         margin: отступ от края листа (мм)
         kerf: диаметр фрезы (мм)
+        materials_output_path: путь для рассчитанной таблицы материалов. GUI
+            передаёт путь черновика и публикует его после решения оператора.
 
     Returns:
         tuple: (словарь упаковщиков, количество использованных листов, количество карт раскроя)
@@ -90,6 +141,7 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
     logger.info("Запуск упаковки с полным приоритетом остатков")
 
     packers_by_material = {}
+    layout_snapshots = []
     total_used_sheets = 0
     remnants_manager = RemnantsManager(margin=margin, kerf=kerf)
     current_materials_df = materials_df.copy()
@@ -140,18 +192,9 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
             continue
 
         # Подготовка деталей для упаковки
-        rects_to_pack = []
         material_details = material_details.reset_index(drop=True)
-        for idx, detail in material_details.iterrows():
-            packing_width = detail['length_mm'] + kerf
-            packing_height = detail['width_mm'] + kerf
-            if packing_width <= 0 or packing_height <= 0:
-                logger.info(
-                    f"Пропуск детали {detail['part_id']}: некорректные размеры {packing_width}x{packing_height}")
-                continue
-            quantity = max(1, int(detail.get('quantity', 1)))
-            for _ in range(quantity):
-                rects_to_pack.append((packing_width, packing_height, idx))
+        rects_to_pack, detail_index_by_rect_id = build_rectangles_to_pack(
+            material_details, kerf)
 
         if not rects_to_pack:
             logger.info("Нет деталей для упаковки")
@@ -356,6 +399,10 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
 
         logger.info(f"Использовано целых листов: {used_full_sheets}")
 
+        # Remnants are finalized after reviewable layouts and their explicit
+        # guillotine cuts have been created.
+        generated_remnants = []
+
         # ФАЗА 3: Создание DXF файлов и финального упаковщика
         logger.info("\nФаза 3: Создание DXF файлов")
 
@@ -405,11 +452,12 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                 doc, msp = create_new_dxf()
                 add_sheet_outline(msp, original_length, original_width, margin)
                 details_list = []
+                snapshot_placements = []
 
                 # Добавляем все детали в DXF
                 for rect in packer[0]:
-                    idx = rect.rid
-                    detail = material_details.iloc[idx]
+                    detail = material_details.iloc[
+                        detail_index_by_rect_id[rect.rid]]
 
                     # Рассчитываем фактические размеры детали (за вычетом kerf)
                     rect_width = rect.width - kerf
@@ -429,6 +477,16 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                         'height': rect_height,
                         'rotated': is_rotated
                     }
+                    snapshot_placements.append(Placement(
+                        placement_id=(str(material_key), rect.rid),
+                        x=rect.x,
+                        y=rect.y,
+                        width=rect.width,
+                        height=rect.height,
+                        rotated=is_rotated,
+                        source_index=detail_index_by_rect_id[rect.rid],
+                        material_key=material_key,
+                    ))
 
                     # Добавляем деталь в DXF
                     detail_info = add_detail_to_sheet(
@@ -472,10 +530,25 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                     logger.info(
                         f"Создается карта раскроя для целого листа: {output_file}")
 
+                layout_snapshot = refresh_guillotine_cut(LayoutSnapshot(
+                    layout_id=f"{material_key}:{container_type}:{container_id}",
+                    width=length_with_margin,
+                    height=width_with_margin,
+                    placements=tuple(snapshot_placements),
+                    material_key=material_key,
+                    container_type=container_type,
+                    container_id=container_id,
+                    output_file=str(Path(output_file).resolve()),
+                    thickness=float(thickness),
+                    material=material,
+                ))
+
+                add_guillotine_plan(
+                    msp, layout_snapshot.cut_plan, margin)
+
                 # Добавляем заголовок
                 add_layout_filename_title(
                     msp, original_length, original_width, output_file)
-
                 # Добавляем список деталей БЕЗ имени файла
                 # Не передаем имя файла!
                 add_details_list(msp, original_width, details_list)
@@ -484,6 +557,7 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                 doc.saveas(output_file)
                 logger.info(f"Сохранен файл: {output_file}")
                 layout_count += 1
+                layout_snapshots.append(layout_snapshot)
 
                 # Добавляем контейнер в финальный упаковщик
                 final_packer.add_bin(length_with_margin,
@@ -500,6 +574,20 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
                     f"Ошибка при создании DXF для контейнера {container_id}: {str(e)}")
                 import traceback
                 logger.error(traceback.format_exc())
+
+        generated_remnants = [
+            remnant
+            for layout in layout_snapshots
+            if (
+                layout.thickness == float(thickness)
+                and layout.material == material
+            )
+            for remnant in guillotine_remnants(
+                layout,
+                remnants_manager.min_remnant_width,
+                remnants_manager.min_remnant_length,
+            )
+        ]
 
         # Устанавливаем финальный упаковщик для этой комбинации материал/толщина
         packers_by_material[material_key] = final_packer
@@ -543,13 +631,14 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
             # Обновляем таблицу с передачей размеров листа
             updated_materials = remnants_manager.update_material_table(
                 current_materials_df, final_packer, thickness, material,
-                used_full_sheets, sheet_length, sheet_width)
+                used_full_sheets, sheet_length, sheet_width, generated_remnants)
             current_materials_df = updated_materials
         else:
             logger.warning(
                 f"Не найдены стандартные листы для толщины {thickness} и материала {material}")
             updated_materials = remnants_manager.update_material_table(
-                current_materials_df, final_packer, thickness, material, used_full_sheets)
+                current_materials_df, final_packer, thickness, material, used_full_sheets,
+                remnants=generated_remnants)
             current_materials_df = updated_materials
 
     # Перед сохранением таблицы проверяем наличие колонки remnant_id
@@ -565,10 +654,15 @@ def pack_and_generate_dxf(details_df, materials_df, pattern_dir="patterns", marg
 
     # Сохраняем обновленную таблицу материалов
     remnants_manager.save_material_table(
-        current_materials_df, "updated_materials.csv")
+        current_materials_df, materials_output_path)
 
     logger.info(
         f"Упаковка завершена. Всего листов: {total_used_sheets}, карт раскроя: {layout_count}")
     logger.info(f"Всего остатков в обновленной таблице: {remnants_count}")
 
-    return packers_by_material, total_used_sheets, layout_count
+    return PackingRunResult(
+        packers_by_material=packers_by_material,
+        total_used_sheets=total_used_sheets,
+        layout_count=layout_count,
+        layouts=tuple(layout_snapshots),
+    )
