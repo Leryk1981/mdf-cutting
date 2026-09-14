@@ -296,9 +296,9 @@ def index():
 @app.get("/api/config")
 def config():
     return {
-        "details_path": str(ROOT / "processed_data.csv"),
-        "materials_path": str(ROOT / "materials.csv"),
-        "output_dir": str(ROOT),
+        "details_path": "",
+        "materials_path": "",
+        "output_dir": "",
         "margin": DEFAULT_MARGIN,
         "kerf": DEFAULT_KERF,
     }

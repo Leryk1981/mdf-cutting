@@ -40,8 +40,6 @@ logs/
 # Project specific
 *.dxf
 *.csv
-!packer/materials.csv
-!packer/processed_data.csv
 
 # PyInstaller
 *.manifest

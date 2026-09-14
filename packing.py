@@ -59,6 +59,27 @@ def hybrid_sort(rectangles):
             sorted(small, key=lambda x: (-x[0], -x[1])))
 
 
+def build_rectangles_to_pack(material_details, kerf):
+    """Expand quantities into uniquely identified physical rectangles."""
+    rectangles = []
+    detail_index_by_rect_id = {}
+    rect_id = 0
+    for detail_index, detail in material_details.iterrows():
+        packing_width = detail['length_mm'] + kerf
+        packing_height = detail['width_mm'] + kerf
+        if packing_width <= 0 or packing_height <= 0:
+            logger.info(
+                f"Пропуск детали {detail['part_id']}: некорректные размеры "
+                f"{packing_width}x{packing_height}")
+            continue
+        quantity = max(1, int(detail.get('quantity', 1)))
+        for _ in range(quantity):
+            rectangles.append((packing_width, packing_height, rect_id))
+            detail_index_by_rect_id[rect_id] = detail_index
+            rect_id += 1
+    return rectangles, detail_index_by_rect_id
+
+
 def format_remnant_id(remnant_id):
     """
     Форматирует ID остатка для отображения в имени файла.
@@ -171,18 +192,9 @@ def pack_and_generate_dxf(
             continue
 
         # Подготовка деталей для упаковки
-        rects_to_pack = []
         material_details = material_details.reset_index(drop=True)
-        for idx, detail in material_details.iterrows():
-            packing_width = detail['length_mm'] + kerf
-            packing_height = detail['width_mm'] + kerf
-            if packing_width <= 0 or packing_height <= 0:
-                logger.info(
-                    f"Пропуск детали {detail['part_id']}: некорректные размеры {packing_width}x{packing_height}")
-                continue
-            quantity = max(1, int(detail.get('quantity', 1)))
-            for _ in range(quantity):
-                rects_to_pack.append((packing_width, packing_height, idx))
+        rects_to_pack, detail_index_by_rect_id = build_rectangles_to_pack(
+            material_details, kerf)
 
         if not rects_to_pack:
             logger.info("Нет деталей для упаковки")
@@ -444,8 +456,8 @@ def pack_and_generate_dxf(
 
                 # Добавляем все детали в DXF
                 for rect in packer[0]:
-                    idx = rect.rid
-                    detail = material_details.iloc[idx]
+                    detail = material_details.iloc[
+                        detail_index_by_rect_id[rect.rid]]
 
                     # Рассчитываем фактические размеры детали (за вычетом kerf)
                     rect_width = rect.width - kerf

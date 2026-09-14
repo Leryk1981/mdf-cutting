@@ -1,4 +1,3 @@
-import sys
 import threading
 import webbrowser
 
@@ -6,17 +5,8 @@ from packer.config import setup_logging
 
 
 def main():
-    """Launch the browser UI, retaining Tkinter behind ``--legacy-tk``."""
+    """Launch the browser-based MDF cutting workspace."""
     setup_logging()
-    if "--legacy-tk" in sys.argv:
-        import tkinter as tk
-        from packer.gui import CuttingAppGUI
-
-        root = tk.Tk()
-        CuttingAppGUI(root)
-        root.mainloop()
-        return
-
     import uvicorn
     from web_app import app
 
