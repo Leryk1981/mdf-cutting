@@ -37,6 +37,8 @@ class LayoutSnapshot:
     container_type: str = ""
     container_id: object = None
     output_file: str = ""
+    thickness: float | None = None
+    material: str = ""
 
 
 @dataclass(frozen=True)
@@ -173,6 +175,8 @@ def repack_unlocked(layouts, locked_ids):
             container_type=layout.container_type,
             container_id=layout.container_id,
             output_file=layout.output_file,
+            thickness=layout.thickness,
+            material=layout.material,
         )
         for index, layout in enumerate(original_layouts)
         if locked_by_layout[index]

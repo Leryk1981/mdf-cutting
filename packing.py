@@ -537,6 +537,8 @@ def pack_and_generate_dxf(
                     container_type=container_type,
                     container_id=container_id,
                     output_file=str(Path(output_file).resolve()),
+                    thickness=float(thickness),
+                    material=material,
                 ))
 
                 # Добавляем контейнер в финальный упаковщик
