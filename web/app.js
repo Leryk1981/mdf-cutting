@@ -600,10 +600,10 @@ byId("cut-button").addEventListener("click", () => updateCutPlan(
 byId("undo-button").addEventListener("click", () => sessionAction("undo", null, { success: "Последнее действие отменено." }));
 byId("reset-button").addEventListener("click", () => sessionAction("reset", null, { success: "Восстановлен исходный раскрой." }));
 byId("repack-button").addEventListener("click", async () => {
-  showBusy(true, "Пересчитываются остальные детали…");
+  showBusy(true, "Уплотняются остальные детали…");
   const payload = await sessionAction("repack");
   showBusy(false);
-  if (payload) toast(payload.repack_changed ? `Пересчёт завершён. Освобождено карт: ${payload.freed_layouts}.` : "Другого допустимого размещения не найдено.");
+  if (payload) toast(payload.repack_changed ? `Уплотнение завершено. Освобождено карт: ${payload.freed_layouts}.` : "Более плотного допустимого размещения не найдено.");
 });
 byId("zoom-in").addEventListener("click", () => zoom(0.8));
 byId("zoom-out").addEventListener("click", () => zoom(1.25));

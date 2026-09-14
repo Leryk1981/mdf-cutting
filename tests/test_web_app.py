@@ -163,6 +163,8 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("Прилипло", script)
         self.assertIn('sessionAction("cut-plan"', script)
         self.assertIn('id="cut-more-button"', html)
+        self.assertIn("Уплотнить остальные детали", html)
+        self.assertNotIn("Пересчитать остальные детали", html)
         self.assertIn("rememberLocation", script)
         self.assertIn('query.set("map"', script)
 

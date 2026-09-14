@@ -21,3 +21,6 @@
 ```powershell
 .\.venv\Scripts\python.exe main.py --legacy-tk
 ```
+
+Пошаговый производственный сценарий описан в
+[руководстве оператора](docs/operator-review-guide.md).

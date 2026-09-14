@@ -150,12 +150,12 @@ class OperatorReviewDialog:
         self.cut_button = self._button(
             right, "Сменить направление реза", self._toggle_cut)
         ttk.Separator(right).pack(fill="x", pady=10)
-        self._button(right, "Пересчитать остальные детали", self._auto_repack)
+        self._button(right, "Уплотнить остальные детали", self._auto_repack)
         self._button(right, "Открыть DXF текущего варианта", self._open_preview)
         ttk.Label(
             right,
             text=("Ручные перемещения учитываются сразу и закрепляются. "
-                  "Повторно запускать раскрой не нужно: пересчитайте остальные "
+                  "Повторно запускать раскрой не нужно: уплотните остальные "
                   "детали и нажмите «Сохранить и завершить»."),
             wraplength=250, justify="left", padding=(0, 10, 0, 0),
         ).pack(fill="x")
