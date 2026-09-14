@@ -1,3 +1,4 @@
+import os
 import threading
 import webbrowser
 
@@ -10,9 +11,16 @@ def main():
     import uvicorn
     from web_app import app
 
-    url = "http://127.0.0.1:8765"
+    port = int(os.environ.get("MDF_CUTTING_PORT", "8765"))
+    url = f"http://127.0.0.1:{port}"
     threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    uvicorn.run(app, host="127.0.0.1", port=8765)
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=port,
+        log_config=None,
+        access_log=False,
+    )
 
 
 if __name__ == "__main__":

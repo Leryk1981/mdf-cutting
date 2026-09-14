@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 
 # Файл логирования
 LOG_FILE = 'packer.log'
@@ -23,12 +24,11 @@ def setup_logging():
         LOG_FILE, encoding='utf-8', mode='w')
     file_handler.setFormatter(logging.Formatter(log_format))
 
-    # Добавляем консольный обработчик
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(logging.Formatter(log_format))
-
     logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
+    if sys.stderr is not None:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(logging.Formatter(log_format))
+        logger.addHandler(stream_handler)
 
     return logger
 

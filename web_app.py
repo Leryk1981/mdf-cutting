@@ -350,12 +350,10 @@ def run_cutting(request: RunRequest):
     try:
         details_path = _safe_path(request.details_path, "файл деталей")
         materials_path = _safe_path(request.materials_path, "файл склада")
-        pattern_dir = ROOT / "patterns"
         output_dir = _safe_path(
             request.output_dir, "папка результатов", must_exist=False)
         if not details_path.is_file() or not materials_path.is_file():
             raise ValueError("Для деталей и склада должны быть выбраны CSV-файлы")
-        pattern_dir.mkdir(exist_ok=True)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         details_df, materials_df = read_csv_files(
@@ -391,7 +389,7 @@ def run_cutting(request: RunRequest):
                 packing_result = pack_and_generate_dxf(
                     details_df,
                     materials_df,
-                    pattern_dir,
+                    "",
                     request.margin,
                     request.kerf,
                     materials_output_path=pending,
