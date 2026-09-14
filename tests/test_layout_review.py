@@ -3,11 +3,72 @@ import unittest
 from packer.layout_review import (
     LayoutSnapshot,
     Placement,
+    move_placement,
     repack_unlocked,
+    rotate_placement,
 )
 
 
 class LayoutReviewTests(unittest.TestCase):
+    def test_move_rejects_collision_and_preserves_original(self):
+        layouts = (LayoutSnapshot(
+            "sheet-1", 100, 100,
+            (
+                Placement("A", 0, 0, 40, 40),
+                Placement("B", 50, 0, 40, 40),
+            ),
+        ),)
+
+        with self.assertRaisesRegex(ValueError, "пересекается"):
+            move_placement(layouts, "A", "sheet-1", 55, 0)
+
+        self.assertEqual(layouts[0].placements[0].x, 0)
+
+    def test_move_can_transfer_detail_between_compatible_maps(self):
+        layouts = (
+            LayoutSnapshot(
+                "sheet-1", 100, 100,
+                (Placement("A", 0, 0, 40, 40, material_key="16_S"),),
+                material_key="16_S",
+            ),
+            LayoutSnapshot(
+                "sheet-2", 100, 100, (), material_key="16_S"),
+        )
+
+        moved = move_placement(layouts, "A", "sheet-2", 50, 50)
+
+        self.assertFalse(moved[0].placements)
+        self.assertEqual(moved[1].placements[0].placement_id, "A")
+        self.assertEqual((moved[1].placements[0].x, moved[1].placements[0].y),
+                         (50, 50))
+
+    def test_move_rejects_another_material(self):
+        layouts = (
+            LayoutSnapshot(
+                "16-mm", 100, 100,
+                (Placement("A", 0, 0, 40, 40, material_key="16_S"),),
+                material_key="16_S",
+            ),
+            LayoutSnapshot(
+                "19-mm", 100, 100, (), material_key="19_S"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "материал"):
+            move_placement(layouts, "A", "19-mm", 0, 0)
+
+    def test_rotation_uses_center_and_rejects_out_of_bounds(self):
+        layouts = (LayoutSnapshot(
+            "sheet-1", 100, 100,
+            (Placement("A", 10, 20, 60, 20),),
+        ),)
+
+        rotated = rotate_placement(layouts, "A")
+        placement = rotated[0].placements[0]
+
+        self.assertEqual((placement.x, placement.y), (30, 0))
+        self.assertEqual((placement.width, placement.height), (20, 60))
+        self.assertTrue(placement.rotated)
+
     def test_repack_can_free_the_last_sheet(self):
         layouts = (
             LayoutSnapshot(

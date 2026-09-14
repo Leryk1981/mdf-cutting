@@ -1,6 +1,6 @@
 """Editable, engine-independent layout snapshots for operator review."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Hashable, Iterable
 
 
@@ -90,6 +90,99 @@ def calculate_layout_metrics(layouts: Iterable[LayoutSnapshot]):
         container_area=container_area,
         utilization=utilization,
     )
+
+
+def move_placement(layouts, placement_id, target_layout_id, x, y):
+    """Move one placement, rejecting material mismatch, bounds, or collision."""
+    layouts = tuple(layouts)
+    source_index = None
+    target_index = None
+    placement = None
+    for layout_index, layout in enumerate(layouts):
+        if layout.layout_id == target_layout_id:
+            target_index = layout_index
+        for candidate in layout.placements:
+            if candidate.placement_id == placement_id:
+                if placement is not None:
+                    raise ValueError(f"Повторяется ID детали {placement_id}")
+                source_index = layout_index
+                placement = candidate
+
+    if placement is None:
+        raise ValueError(f"Не найдена деталь {placement_id}")
+    if target_index is None:
+        raise ValueError(f"Не найдена карта {target_layout_id}")
+    source_layout = layouts[source_index]
+    target_layout = layouts[target_index]
+    if source_layout.material_key != target_layout.material_key:
+        raise ValueError("Нельзя переносить деталь на другой материал или толщину")
+
+    moved = replace(placement, x=float(x), y=float(y))
+    if not _inside_layout(moved, target_layout):
+        raise ValueError("Деталь выходит за границы карты")
+    for other in target_layout.placements:
+        if other.placement_id != placement_id and _intersects(moved, other):
+            raise ValueError(f"Деталь пересекается с {other.placement_id}")
+
+    edited = list(layouts)
+    if source_index == target_index:
+        edited[source_index] = replace(
+            source_layout,
+            placements=tuple(
+                moved if item.placement_id == placement_id else item
+                for item in source_layout.placements
+            ),
+        )
+    else:
+        edited[source_index] = replace(
+            source_layout,
+            placements=tuple(
+                item for item in source_layout.placements
+                if item.placement_id != placement_id
+            ),
+        )
+        edited[target_index] = replace(
+            target_layout,
+            placements=target_layout.placements + (moved,),
+        )
+    return tuple(edited)
+
+
+def rotate_placement(layouts, placement_id):
+    """Rotate one placement by 90 degrees around its current center."""
+    for layout in layouts:
+        for placement in layout.placements:
+            if placement.placement_id != placement_id:
+                continue
+            center_x = placement.x + placement.width / 2
+            center_y = placement.y + placement.height / 2
+            rotated = replace(
+                placement,
+                x=center_x - placement.height / 2,
+                y=center_y - placement.width / 2,
+                width=placement.height,
+                height=placement.width,
+                rotated=not placement.rotated,
+            )
+            temporary = tuple(
+                replace(
+                    candidate_layout,
+                    placements=tuple(
+                        rotated if item.placement_id == placement_id else item
+                        for item in candidate_layout.placements
+                    ),
+                ) if candidate_layout.layout_id == layout.layout_id
+                else candidate_layout
+                for candidate_layout in layouts
+            )
+            return move_placement(
+                temporary,
+                placement_id,
+                layout.layout_id,
+                rotated.x,
+                rotated.y,
+            )
+    raise ValueError(f"Не найдена деталь {placement_id}")
 
 
 def repack_unlocked(layouts, locked_ids):
