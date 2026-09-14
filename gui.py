@@ -406,7 +406,7 @@ class CuttingAppGUI:
             try:
                 # Ядро рассчитывает склад один раз и пишет его в черновик.
                 logger.info("Начинается процесс раскроя")
-                _, total_used_sheets, layout_count = pack_and_generate_dxf(
+                packing_result = pack_and_generate_dxf(
                     details_df,
                     materials_df,
                     pattern_dir,
@@ -414,6 +414,8 @@ class CuttingAppGUI:
                     int(kerf),
                     materials_output_path=draft_materials_path,
                 )
+                total_used_sheets = packing_result.total_used_sheets
+                layout_count = packing_result.layout_count
                 remnant_count = count_material_remnants(draft_materials_path)
             finally:
                 os.chdir(current_dir)

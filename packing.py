@@ -1,4 +1,7 @@
 import os
+from dataclasses import dataclass
+from pathlib import Path
+
 from rectpack import newPacker, MaxRectsBssf
 from .config import logger
 from .patterns import load_patterns
@@ -10,12 +13,29 @@ from .dxf_generator import (
     add_details_list
 )
 from .remnants import RemnantsManager
+from .layout_review import LayoutSnapshot, Placement
 from .constants import (
     MATERIALS_REQUIRED_COLUMNS,
     DETAILS_REQUIRED_COLUMNS,
     DEFAULT_MARGIN,
     DEFAULT_KERF
 )
+
+
+@dataclass(frozen=True)
+class PackingRunResult:
+    """Packing outputs plus engine-independent layouts for operator review."""
+
+    packers_by_material: dict
+    total_used_sheets: int
+    layout_count: int
+    layouts: tuple[LayoutSnapshot, ...]
+
+    def __iter__(self):
+        """Keep compatibility with the legacy three-value tuple unpacking."""
+        yield self.packers_by_material
+        yield self.total_used_sheets
+        yield self.layout_count
 
 
 def hybrid_sort(rectangles):
@@ -94,6 +114,7 @@ def pack_and_generate_dxf(
     logger.info("Запуск упаковки с полным приоритетом остатков")
 
     packers_by_material = {}
+    layout_snapshots = []
     total_used_sheets = 0
     remnants_manager = RemnantsManager(margin=margin, kerf=kerf)
     current_materials_df = materials_df.copy()
@@ -417,6 +438,7 @@ def pack_and_generate_dxf(
                 doc, msp = create_new_dxf()
                 add_sheet_outline(msp, original_length, original_width, margin)
                 details_list = []
+                snapshot_placements = []
 
                 # Добавляем все детали в DXF
                 for rect in packer[0]:
@@ -441,6 +463,15 @@ def pack_and_generate_dxf(
                         'height': rect_height,
                         'rotated': is_rotated
                     }
+                    snapshot_placements.append(Placement(
+                        placement_id=(str(material_key), rect.rid),
+                        x=rect.x,
+                        y=rect.y,
+                        width=rect.width,
+                        height=rect.height,
+                        rotated=is_rotated,
+                        source_index=detail_index_by_rect_id[rect.rid],
+                    ))
 
                     # Добавляем деталь в DXF
                     detail_info = add_detail_to_sheet(
@@ -496,6 +527,16 @@ def pack_and_generate_dxf(
                 doc.saveas(output_file)
                 logger.info(f"Сохранен файл: {output_file}")
                 layout_count += 1
+                layout_snapshots.append(LayoutSnapshot(
+                    layout_id=f"{material_key}:{container_type}:{container_id}",
+                    width=length_with_margin,
+                    height=width_with_margin,
+                    placements=tuple(snapshot_placements),
+                    material_key=material_key,
+                    container_type=container_type,
+                    container_id=container_id,
+                    output_file=str(Path(output_file).resolve()),
+                ))
 
                 # Добавляем контейнер в финальный упаковщик
                 final_packer.add_bin(length_with_margin,
@@ -584,4 +625,9 @@ def pack_and_generate_dxf(
         f"Упаковка завершена. Всего листов: {total_used_sheets}, карт раскроя: {layout_count}")
     logger.info(f"Всего остатков в обновленной таблице: {remnants_count}")
 
-    return packers_by_material, total_used_sheets, layout_count
+    return PackingRunResult(
+        packers_by_material=packers_by_material,
+        total_used_sheets=total_used_sheets,
+        layout_count=layout_count,
+        layouts=tuple(layout_snapshots),
+    )
