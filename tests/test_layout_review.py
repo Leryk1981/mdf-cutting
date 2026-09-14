@@ -101,6 +101,34 @@ class LayoutReviewTests(unittest.TestCase):
         self.assertEqual(proposal.layouts, layouts)
         self.assertIn("пересекаются", proposal.reason)
 
+    def test_repack_never_mixes_material_groups(self):
+        layouts = (
+            LayoutSnapshot(
+                layout_id="16-mm",
+                width=100,
+                height=100,
+                placements=(Placement(
+                    "A", 0, 0, 50, 100, material_key="16_S"),),
+                material_key="16_S",
+            ),
+            LayoutSnapshot(
+                layout_id="19-mm",
+                width=100,
+                height=100,
+                placements=(Placement(
+                    "B", 0, 0, 50, 100, material_key="19_S"),),
+                material_key="19_S",
+            ),
+        )
+
+        proposal = repack_unlocked(layouts, locked_ids=set())
+
+        self.assertEqual(proposal.after.layout_count, 2)
+        self.assertEqual(
+            [layout.material_key for layout in proposal.layouts],
+            ["16_S", "19_S"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

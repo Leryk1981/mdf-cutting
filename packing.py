@@ -471,6 +471,7 @@ def pack_and_generate_dxf(
                         height=rect.height,
                         rotated=is_rotated,
                         source_index=detail_index_by_rect_id[rect.rid],
+                        material_key=material_key,
                     ))
 
                     # Добавляем деталь в DXF

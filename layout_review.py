@@ -18,6 +18,7 @@ class Placement:
     height: float
     rotated: bool = False
     source_index: int | None = None
+    material_key: object = None
 
     @property
     def area(self):
@@ -137,7 +138,8 @@ def repack_unlocked(layouts, locked_ids):
     )
 
     for placement in unlocked:
-        candidate = _best_position(placement, free_by_layout)
+        candidate = _best_position(
+            placement, free_by_layout, original_layouts)
         if candidate is None:
             return _failed_proposal(
                 original_layouts,
@@ -155,6 +157,7 @@ def repack_unlocked(layouts, locked_ids):
             height=height,
             rotated=rotated,
             source_index=placement.source_index,
+            material_key=placement.material_key,
         )
         locked_by_layout[layout_index].append(packed)
         free_by_layout[layout_index] = _reserve(
@@ -253,7 +256,7 @@ def _inside_layout(placement, layout):
     )
 
 
-def _best_position(placement, free_by_layout):
+def _best_position(placement, free_by_layout, layouts):
     best = None
     best_score = None
     orientations = [(placement.width, placement.height, placement.rotated)]
@@ -262,6 +265,8 @@ def _best_position(placement, free_by_layout):
             (placement.height, placement.width, not placement.rotated))
 
     for layout_index, free_rectangles in enumerate(free_by_layout):
+        if layouts[layout_index].material_key != placement.material_key:
+            continue
         for free_rectangle in free_rectangles:
             for width, height, rotated in orientations:
                 if (
